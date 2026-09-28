@@ -1,0 +1,10 @@
+﻿vuln_pattern,vuln_pattern_zh,incidents,total_loss_usd,projects,defense_zh
+account_validation,帳戶驗證缺失,6,391156000.0,Cashio、Crema Finance、Raydium (legacy AMM V3 pools)、Solend、Texture (Texture Vaults / SuperLendy)、Wormhole (Solana–Ethereum token bridge),"使用 Anchor 的 Account<'info, T>、has_one、address、constraint 等約束，檢查每個帳戶的 owner、mint、PDA 種子與關聯；sysvar 應核對其固定位址；抵押品帳戶鏈要從可信任的根帳戶逐層驗證。"
+undisclosed,細節未公開,2,8935000.0,Cypher Protocol、NoOnes,無法給出具體建議；可參考其他模式的一般防禦措施。
+race_condition,競態條件,1,830000.0,Aurory (SyncSpace),餘額更新使用資料庫交易與列鎖，或採用冪等設計；提領前與鏈上資料對帳。
+reinitialization,重複初始化,1,155000.0,Metaplex Candy Machine v1,使用 Anchor 的 init 約束（帳戶已存在時會失敗），或在初始化時檢查 is_initialized 旗標與帳戶 discriminator；謹慎使用 init_if_needed。
+offchain_logic,鏈下系統邏輯缺陷,2,15000.0,io.net、Magic Eden,鏈下 API 同樣需要權限控管與輸入驗證（例如參數化查詢防 SQL 注入）；NFT 集合、所有權等資訊應以鏈上資料交叉驗證。
+crypto_verification,密碼學驗證缺陷,3,0.0,"SIMD-0376 (proposed ed25519 signature verification change, pre-activation)、ZK ElGamal Proof program (Token-2022 confidential transfers)、ZK ElGamal Proof program / Token-2022 confidential transfers",Fiat-Shamir transcript 必須納入所有公開輸入與證明者訊息；拒絕小階點與非標準編碼；密碼學元件需專門審計，並盡量採用形式化驗證。
+input_handling_dos,輸入處理不當（節點崩潰 / 阻斷服務）,3,0.0,Solana (Agave and Jito-Solana validator clients)、Agave / Jito validator clients (gossip and vote processing)、Quinn QUIC library (quinn-proto) used by Agave validators,對所有外部輸入做完整的格式與邊界檢查，避免 unwrap() 或 panic；持續進行模糊測試；維持多個驗證節點客戶端（Agave、Firedancer），降低單一實作漏洞的衝擊。
+arithmetic,數值計算錯誤（捨入 / 溢位）,2,0.0,"Solana rBPF (eBPF VM / ELF loader)、SPL Token Lending program (Solana Program Library) and forks (Solend, Tulip, Larix, etc.)",使用 checked_add、checked_mul 等 checked 運算；依操作方向明確選擇 floor / ceil，讓捨入永遠對協議有利；release 版本也啟用 overflow-checks。
+control_flow,控制流程錯誤,1,0.0,Jet Protocol,迴圈中遇到特殊值應使用 continue 或 filter，而非 break / take_while；為空帳戶、預設 Pubkey 等邊界情況撰寫測試並進行模糊測試（fuzzing）。

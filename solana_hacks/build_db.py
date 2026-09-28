@@ -29,6 +29,7 @@ INCIDENT_FIELDS = (
     "project",
     "project_type",
     "category",
+    "vuln_pattern",
     "attack_vector",
     "loss_usd",
     "assets_stolen",
@@ -42,6 +43,8 @@ INCIDENT_FIELDS = (
     "confidence",
     "notes",
 )
+# Categories whose root cause is a code logic flaw; these must carry a vuln_pattern.
+LOGIC_BUG_CATEGORIES = {"smart_contract_bug", "protocol_vulnerability"}
 ID_PATTERN = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 DATE_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
@@ -61,6 +64,7 @@ def validate(incidents: list[dict], lookups: dict) -> list[str]:
         "chain_scope": {"solana_only", "multi_chain"},
         "confidence": {"high", "medium", "low"},
     }
+    vuln_patterns = {row["code"] for row in lookups["vuln_patterns"]}
     seen_ids: set[str] = set()
 
     for idx, inc in enumerate(incidents):
@@ -86,6 +90,16 @@ def validate(incidents: list[dict], lookups: dict) -> list[str]:
         for field, values in allowed.items():
             if inc[field] not in values:
                 errors.append(f"{label}: invalid {field} {inc[field]!r}")
+
+        pattern = inc["vuln_pattern"]
+        if inc["category"] in LOGIC_BUG_CATEGORIES:
+            if pattern not in vuln_patterns:
+                errors.append(f"{label}: logic-bug incident needs a valid vuln_pattern")
+        elif pattern is not None:
+            errors.append(f"{label}: vuln_pattern is only for logic-bug categories")
+
+        if inc["recovery_status"] == "not_applicable" and inc["loss_usd"]:
+            errors.append(f"{label}: not_applicable recovery but loss_usd > 0")
 
         for field in ("loss_usd", "recovered_usd"):
             value = inc[field]
@@ -139,6 +153,20 @@ def build(db_path: Path) -> sqlite3.Connection:
         "INSERT INTO recovery_statuses (code, name_zh, name_en) VALUES (?, ?, ?)",
         [(r["code"], r["name_zh"], r["name_en"]) for r in lookups["recovery_statuses"]],
     )
+    conn.executemany(
+        "INSERT INTO vuln_patterns (code, name_zh, name_en, description_zh, defense_zh)"
+        " VALUES (?, ?, ?, ?, ?)",
+        [
+            (
+                r["code"],
+                r["name_zh"],
+                r["name_en"],
+                r["description_zh"],
+                r["defense_zh"],
+            )
+            for r in lookups["vuln_patterns"]
+        ],
+    )
 
     placeholders = ", ".join("?" for _ in INCIDENT_FIELDS)
     conn.executemany(
@@ -172,6 +200,7 @@ def export_csv(conn: sqlite3.Connection, export_dir: Path) -> None:
         " ORDER BY incident_id, id",
         "yearly_summary.csv": "SELECT * FROM v_yearly_summary",
         "category_summary.csv": "SELECT * FROM v_category_summary",
+        "vuln_pattern_summary.csv": "SELECT * FROM v_vuln_pattern_summary",
     }
     for filename, sql in queries.items():
         cur = conn.execute(sql)

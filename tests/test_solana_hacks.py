@@ -37,6 +37,33 @@ def test_validate_rejects_bad_rows():
     assert any("source" in e for e in errors)
 
 
+def test_validate_enforces_vuln_pattern_rules():
+    lookups = build_db.load_json(build_db.LOOKUPS_PATH)
+    incidents = build_db.load_json(build_db.INCIDENTS_PATH)
+    logic_bug = next(i for i in incidents if i["category"] == "smart_contract_bug")
+    other = next(i for i in incidents if i["category"] == "private_key_compromise")
+    errors = build_db.validate([dict(logic_bug, vuln_pattern=None)], lookups)
+    assert any("needs a valid vuln_pattern" in e for e in errors)
+    errors = build_db.validate([dict(other, vuln_pattern="arithmetic")], lookups)
+    assert any("only for logic-bug categories" in e for e in errors)
+
+
+def test_logic_bugs_are_fully_classified(conn):
+    unclassified = conn.execute(
+        "SELECT id FROM incidents"
+        " WHERE category IN ('smart_contract_bug', 'protocol_vulnerability')"
+        " AND vuln_pattern IS NULL"
+    ).fetchall()
+    assert unclassified == []
+    tagged = conn.execute(
+        "SELECT COUNT(*) FROM incidents WHERE vuln_pattern IS NOT NULL"
+    ).fetchone()[0]
+    summarized = conn.execute(
+        "SELECT SUM(incidents) FROM v_vuln_pattern_summary"
+    ).fetchone()[0]
+    assert tagged == summarized
+
+
 def test_every_incident_has_a_source(conn):
     orphans = conn.execute(
         "SELECT id FROM incidents i"

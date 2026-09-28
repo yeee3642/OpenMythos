@@ -75,3 +75,15 @@ SELECT date, project, summary_zh
 SELECT publisher, title, url
   FROM sources
  WHERE incident_id = 'wormhole-2022';
+
+-- 11. 邏輯漏洞：依漏洞模式統計（含防禦建議）
+SELECT vuln_pattern_zh, incidents, printf('$%,d', total_loss_usd) AS total_loss,
+       defense_zh
+  FROM v_vuln_pattern_summary;
+
+-- 12. 邏輯漏洞：全部事件明細，依漏洞模式分組
+SELECT vuln_pattern_zh, date, project, printf('$%,d', loss_usd) AS loss,
+       root_cause_zh
+  FROM v_incidents
+ WHERE vuln_pattern IS NOT NULL
+ ORDER BY vuln_pattern, date;

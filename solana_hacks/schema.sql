@@ -26,6 +26,15 @@ CREATE TABLE recovery_statuses (
     name_en  TEXT NOT NULL
 );
 
+-- 邏輯漏洞模式（只套用於 smart_contract_bug 與 protocol_vulnerability 類別）
+CREATE TABLE vuln_patterns (
+    code            TEXT PRIMARY KEY,
+    name_zh         TEXT NOT NULL,
+    name_en         TEXT NOT NULL,
+    description_zh  TEXT NOT NULL,
+    defense_zh      TEXT NOT NULL   -- 開發者防禦建議
+);
+
 -- ---------------------------------------------------------------------------
 -- 事件主表
 -- ---------------------------------------------------------------------------
@@ -37,6 +46,7 @@ CREATE TABLE incidents (
     project          TEXT NOT NULL,
     project_type     TEXT NOT NULL REFERENCES project_types (code),
     category         TEXT NOT NULL REFERENCES categories (code),
+    vuln_pattern     TEXT REFERENCES vuln_patterns (code),  -- 僅邏輯漏洞類事件
     attack_vector    TEXT NOT NULL,                  -- 簡短英文描述攻擊手法
     loss_usd         REAL CHECK (loss_usd IS NULL OR loss_usd >= 0),
     assets_stolen    TEXT,
@@ -85,6 +95,8 @@ SELECT
     pt.name_zh                                               AS project_type_zh,
     i.category,
     c.name_zh                                                AS category_zh,
+    i.vuln_pattern,
+    vp.name_zh                                               AS vuln_pattern_zh,
     i.attack_vector,
     i.loss_usd,
     i.recovered_usd,
@@ -105,7 +117,8 @@ SELECT
 FROM incidents i
 JOIN project_types     pt ON pt.code = i.project_type
 JOIN categories        c  ON c.code  = i.category
-JOIN recovery_statuses rs ON rs.code = i.recovery_status;
+JOIN recovery_statuses rs ON rs.code = i.recovery_status
+LEFT JOIN vuln_patterns vp ON vp.code = i.vuln_pattern;
 
 -- 年度統計
 -- total_loss_usd 含多鏈事件的全部損失；solana_only_loss_usd 只計純 Solana 事件。
@@ -147,3 +160,17 @@ SELECT
 FROM v_incidents
 GROUP BY project_type, project_type_zh
 ORDER BY total_loss_usd DESC;
+
+-- 邏輯漏洞模式統計（含防禦建議）
+CREATE VIEW v_vuln_pattern_summary AS
+SELECT
+    vp.code                         AS vuln_pattern,
+    vp.name_zh                      AS vuln_pattern_zh,
+    COUNT(i.id)                     AS incidents,
+    SUM(COALESCE(i.loss_usd, 0))    AS total_loss_usd,
+    group_concat(i.project, '、')   AS projects,
+    vp.defense_zh
+FROM vuln_patterns vp
+LEFT JOIN incidents i ON i.vuln_pattern = vp.code
+GROUP BY vp.code, vp.name_zh, vp.defense_zh
+ORDER BY total_loss_usd DESC, incidents DESC;

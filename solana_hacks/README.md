@@ -43,13 +43,38 @@
 - **至少 6 起事件被歸因或疑似歸因於北韓**，包括 Drift、Upbit、BitoPro、Phemex、Solareum。可用 `queries.sql` 第 6 個查詢列出。
 - 供應鏈攻擊（惡意 npm / crates / GitHub 套件）次數多，但公開的損失金額很少，實際損失可能被低估。
 
+## 邏輯漏洞分析
+
+共 21 起事件的根因是程式邏輯缺陷，合計損失約 **4.01 億美元**：`smart_contract_bug` 14 起，`protocol_vulnerability` 7 起。每起事件都在 `vuln_pattern` 欄位標記漏洞模式，`vuln_patterns` 代碼表附有開發者防禦建議。
+
+| 漏洞模式 | 事件數 | 損失 | 事件 |
+|---|---:|---:|---|
+| 帳戶驗證缺失 | 6 | 3.91 億美元 | Wormhole、Cashio、Crema、Texture、Raydium 舊版 AMM V3、Solend (2021) |
+| 細節未公開 | 2 | 894 萬美元 | Cypher、NoOnes |
+| 競態條件 | 1 | 83 萬美元 | Aurory SyncSpace |
+| 重複初始化 | 1 | 15.5 萬美元 | Metaplex Candy Machine v1 |
+| 鏈下系統邏輯缺陷 | 2 | 1.5 萬美元 | Magic Eden、io.net |
+| 密碼學驗證缺陷 | 3 | 0 | ZK ElGamal（2025 年 4 月、6 月）、SIMD-0376 |
+| 輸入處理不當（節點崩潰 / 阻斷服務） | 3 | 0 | Agave ELF 對齊、gossip / 投票處理、Quinn QUIC |
+| 數值計算錯誤（捨入 / 溢位） | 2 | 0 | SPL token-lending 捨入、rBPF 整數溢位 |
+| 控制流程錯誤 | 1 | 0 | Jet Protocol |
+
+### 重點
+
+- **帳戶驗證缺失是 Solana 損失最大的邏輯漏洞**：這 6 起事件約佔邏輯漏洞總損失的 97.5%。Solana 程式用到的帳戶全部由呼叫者傳入，只要漏掉一個 owner、mint 或位址檢查，攻擊者就能用偽造帳戶冒充合法帳戶。Wormhole（偽造 Instructions sysvar）、Cashio（假抵押品帳戶鏈）、Crema（假 tick 帳戶）、Texture（未檢查代幣帳戶擁有者）都屬於這一類。
+- **同類錯誤反覆發生**：從 2021 年的 Solend 到 2026 年的 Raydium 舊版 AMM V3，帳戶驗證缺失橫跨五年一再出現。Raydium 案也顯示，已經淘汰但沒有關閉的舊程式仍然是攻擊面。
+- **L1 層的邏輯漏洞都在遭利用前修補**：密碼學驗證缺陷（ZK ElGamal、SIMD-0376）一旦被利用，可以無限鑄造機密代幣或偽造簽章，是潛在影響最大的一類，但全部由白帽研究者揭露。
+- **審計不等於安全**：Texture 經過審計，仍因缺少 owner 檢查而被攻擊；Cashio 則完全沒有審計。
+
+各模式的防禦建議可用 `queries.sql` 第 11 個查詢列出，第 12 個查詢列出全部邏輯漏洞事件的根因。
+
 ## 檔案結構
 
 ```
 solana_hacks/
 ├── data/
 │   ├── incidents.json     # 事件原始資料（唯一需要手動編輯的檔案）
-│   └── lookups.json       # 代碼表：攻擊類別、專案類型、追回狀態
+│   └── lookups.json       # 代碼表：攻擊類別、專案類型、追回狀態、邏輯漏洞模式
 ├── schema.sql             # SQLite 資料表與檢視表定義
 ├── build_db.py            # 驗證資料 → 建立 solana_hacks.db → 匯出 CSV
 ├── queries.sql            # 常用查詢範例
@@ -58,7 +83,8 @@ solana_hacks/
     ├── incidents.csv
     ├── sources.csv
     ├── yearly_summary.csv
-    └── category_summary.csv
+    ├── category_summary.csv
+    └── vuln_pattern_summary.csv
 ```
 
 ## 使用方式
@@ -98,6 +124,7 @@ for row in conn.execute(
 | `project` | 受害專案或元件名稱 |
 | `project_type` | 專案類型代碼 → `project_types` |
 | `category` | 攻擊類別代碼 → `categories` |
+| `vuln_pattern` | 邏輯漏洞模式代碼 → `vuln_patterns`；`category` 為 `smart_contract_bug` 或 `protocol_vulnerability` 時必填，其他類別為 `NULL` |
 | `attack_vector` | 攻擊手法（英文簡述） |
 | `loss_usd` | 事件當時的美元損失；`NULL` 表示金額不明，`0` 表示確認無損失 |
 | `assets_stolen` | 被盜資產明細 |
@@ -118,6 +145,7 @@ for row in conn.execute(
 - `categories`：攻擊類別（中英文名稱與說明）
 - `project_types`：專案類型
 - `recovery_statuses`：資金追回狀態
+- `vuln_patterns`：邏輯漏洞模式（中英文名稱、說明與開發者防禦建議 `defense_zh`）
 
 ### 檢視表
 
@@ -127,6 +155,7 @@ for row in conn.execute(
 | `v_yearly_summary` | 年度事件數、總損失、總追回金額、單一最大損失 |
 | `v_category_summary` | 依攻擊類別統計 |
 | `v_project_type_summary` | 依專案類型統計 |
+| `v_vuln_pattern_summary` | 依邏輯漏洞模式統計，附事件清單與防禦建議 |
 
 ## 收錄原則
 
