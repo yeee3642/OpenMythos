@@ -1,0 +1,2 @@
+# Only needed for `listen --ws`; everything else is stdlib.
+websockets>=12

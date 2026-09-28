@@ -1,0 +1,68 @@
+{
+  "_comment": "Synthetic DexScreener-style BSC pairs for offline demos and tests. Addresses other than WBNB/USDT are placeholders, not real tokens.",
+  "pairs": [
+    {
+      "chainId": "bsc",
+      "dexId": "pancakeswap",
+      "url": "https://dexscreener.com/bsc/0x1111111111111111111111111111111111111111",
+      "pairAddress": "0x1111111111111111111111111111111111111111",
+      "baseToken": {"address": "0xa000000000000000000000000000000000000001", "name": "Good Sample", "symbol": "GOOD"},
+      "quoteToken": {"address": "0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c", "name": "Wrapped BNB", "symbol": "WBNB"},
+      "priceUsd": "0.02",
+      "txns": {"h1": {"buys": 150, "sells": 120}},
+      "volume": {"h24": 300000},
+      "liquidity": {"usd": 90000},
+      "fdv": 1500000,
+      "pairCreatedAt": 1790000000000
+    },
+    {
+      "chainId": "bsc",
+      "dexId": "pancakeswap",
+      "url": "https://dexscreener.com/bsc/0x2222222222222222222222222222222222222222",
+      "pairAddress": "0x2222222222222222222222222222222222222222",
+      "baseToken": {"address": "0xa000000000000000000000000000000000000002", "name": "Tax Trap", "symbol": "TAX"},
+      "quoteToken": {"address": "0x55d398326f99059fF775485246999027B3197955", "name": "Tether USD", "symbol": "USDT"},
+      "priceUsd": "0.5",
+      "txns": {"h1": {"buys": 60, "sells": 12}},
+      "volume": {"h24": 80000},
+      "liquidity": {"usd": 40000},
+      "fdv": 800000,
+      "pairCreatedAt": 1790000100000
+    },
+    {
+      "chainId": "bsc",
+      "dexId": "pancakeswap",
+      "url": "https://dexscreener.com/bsc/0x3333333333333333333333333333333333333333",
+      "pairAddress": "0x3333333333333333333333333333333333333333",
+      "baseToken": {"address": "0xa000000000000000000000000000000000000003", "name": "Tether USD", "symbol": "USDT"},
+      "quoteToken": {"address": "0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c", "name": "Wrapped BNB", "symbol": "WBNB"},
+      "priceUsd": "1.0",
+      "txns": {"h1": {"buys": 30, "sells": 5}},
+      "liquidity": {"usd": 25000},
+      "fdv": 500000
+    },
+    {
+      "chainId": "bsc",
+      "dexId": "pancakeswap",
+      "url": "https://dexscreener.com/bsc/0x4444444444444444444444444444444444444444",
+      "pairAddress": "0x4444444444444444444444444444444444444444",
+      "baseToken": {"address": "0xa000000000000000000000000000000000000004", "name": "Dust", "symbol": "DUST"},
+      "quoteToken": {"address": "0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c", "name": "Wrapped BNB", "symbol": "WBNB"},
+      "priceUsd": "0.0001",
+      "txns": {"h1": {"buys": 3, "sells": 1}},
+      "liquidity": {"usd": 1800},
+      "fdv": 20000
+    },
+    {
+      "chainId": "ethereum",
+      "dexId": "uniswap",
+      "url": "https://dexscreener.com/ethereum/0x5555555555555555555555555555555555555555",
+      "pairAddress": "0x5555555555555555555555555555555555555555",
+      "baseToken": {"address": "0xa000000000000000000000000000000000000005", "name": "Other Chain", "symbol": "OTHER"},
+      "quoteToken": {"address": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2", "name": "Wrapped Ether", "symbol": "WETH"},
+      "txns": {"h1": {"buys": 10, "sells": 10}},
+      "liquidity": {"usd": 50000},
+      "fdv": 100000
+    }
+  ]
+}

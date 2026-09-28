@@ -11,6 +11,9 @@ from dataclasses import dataclass
 from .models import DROP, KEEP, Decision, RuleHit
 
 DROP_WEIGHT = 10
+# Risk weight when a DROP rule is applied at FLAG level (e.g. a concentration
+# between the flag and drop thresholds).
+DOWNGRADED_FLAG_WEIGHT = 3
 
 
 @dataclass(frozen=True)
@@ -37,12 +40,18 @@ def make_hit(
 ) -> RuleHit:
     rule = rules[rule_id]
     action = action or rule.action
+    if action == DROP:
+        weight = DROP_WEIGHT
+    elif rule.action == DROP:
+        weight = DOWNGRADED_FLAG_WEIGHT
+    else:
+        weight = rule.weight
     return RuleHit(
         rule_id=rule_id,
         action=action,
         reason_zh=f"{rule.title_zh}{'：' + detail if detail else ''}",
         case_refs=tuple(refs) if refs is not None else rule.case_refs,
-        weight=DROP_WEIGHT if action == DROP else rule.weight,
+        weight=weight,
     )
 
 

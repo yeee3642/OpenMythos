@@ -431,3 +431,4 @@ flycheck_*.el
 
 # solana_monitor runtime data
 solana_monitor/data/
+evm_monitor/data/
