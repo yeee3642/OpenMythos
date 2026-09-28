@@ -782,24 +782,31 @@ _VERSION_EXE = re.compile(r"/\.local/share/claude/versions/[^/]+$")
 
 
 def classify_posix(comm: str, args: str) -> Optional[str]:
-    """Classify a process by its executable (`ps -o comm=`) and command line.
+    """Classify a process by its executable (`ps -o comm=`) and by the name
+    it was started as (argv[0], the first word of `ps -o args=`).
 
-    Only the executable decides, so a shell that merely mentions a claude
-    path in its arguments is not mistaken for Claude."""
+    Only those two decide -- never words further along the command line -- so
+    a shell that merely mentions a claude path is not mistaken for Claude.
+    Both are needed: macOS reports the resolved executable in comm (e.g.
+    .../versions/2.1.3), while argv[0] / process.title says "claude"."""
     comm = (comm or "").strip()
     args = (args or "").strip()
-    exe = comm or args.split(" ")[0]
-    base = exe.rsplit("/", 1)[-1]
-    if "/Claude.app/Contents/" in exe or (not comm and "/Claude.app/Contents/" in args.split(" -")[0]):
+    argv0 = args.split(" ")[0]
+    if "/Claude.app/Contents/" in comm or "/Claude.app/Contents/" in args.split(" -")[0]:
         return "desktop"
-    if base == "claude-desktop":  # Linux build of Claude Desktop
-        return "desktop"
-    if base == "claude" or _VERSION_EXE.search(exe):
-        return "cli"
-    if base in ("node", "bun", "nodejs"):
-        rest = args.split(" ", 1)[1] if " " in args else ""
-        if _NODE_CLAUDE.search(rest):
+    for exe in (comm, argv0):
+        if not exe:
+            continue
+        base = exe.rsplit("/", 1)[-1]
+        if base == "claude-desktop":  # Linux build of Claude Desktop
+            return "desktop"
+        if base == "claude" or _VERSION_EXE.search(exe):
             return "cli"
+    for exe in (comm, argv0):
+        if exe.rsplit("/", 1)[-1] in ("node", "bun", "nodejs"):
+            rest = args.split(" ", 1)[1] if " " in args else ""
+            if _NODE_CLAUDE.search(rest):
+                return "cli"
     return None
 
 

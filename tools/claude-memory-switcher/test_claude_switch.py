@@ -645,6 +645,9 @@ MAC_COMM = """\
   606 python3
   607 node
   608 /usr/bin/vim
+  609 /Users/me/.local/share/claude/ClaudeCode.app/Contents/MacOS/claude
+  610 /Library/Frameworks/Python.framework/Versions/3.9/Resources/Python.app/Contents/MacOS/Python
+  611 /Applications/Claude.app/Contents/Helpers/disclaimer
 """
 MAC_ARGS = """\
   501 /Applications/Claude.app/Contents/MacOS/Claude
@@ -658,12 +661,16 @@ MAC_ARGS = """\
   606 python3 claude_switch.py clean
   607 node /Users/me/project/server.js
   608 vim /Users/me/notes/claude
+  609 claude daemon
+  610 claude --resume
+  611 /Applications/Claude.app/Contents/Helpers/disclaimer /Users/me/Library/Application Support/Claude/claude-code/2.1/claude
 """
 
 
 def test_parse_ps_mac():
     procs = {p.pid: p.kind for p in cs.parse_ps(MAC_COMM, MAC_ARGS, own_pid=606)}
-    assert procs == {501: "desktop", 502: "desktop", 600: "cli", 601: "cli", 604: "cli", 605: "cli"}
+    assert procs == {501: "desktop", 502: "desktop", 600: "cli", 601: "cli", 604: "cli", 605: "cli",
+                     609: "cli", 610: "cli", 611: "desktop"}
 
 
 def test_parse_ps_linux_short_comm():
@@ -844,7 +851,7 @@ def test_real_cli_round_trip_in_subprocess(tmp_path):
     run("doctor")
 
 
-@pytest.mark.skipif(not os.environ.get("CI"), reason="copies the Python binary next to itself; CI only")
+@pytest.mark.skipif(not os.environ.get("CI"), reason="spawns a fake 'claude' executable; CI only")
 def test_detects_a_real_process_named_claude(tmp_path):
     """Start a process whose executable is called claude(.exe) and check that
     the platform's process scan reports it as Claude Code."""
@@ -852,10 +859,18 @@ def test_detects_a_real_process_named_claude(tmp_path):
     import subprocess
     import time
 
-    exe = Path(sys.executable).resolve()
-    fake = exe.with_name("claude" + (".exe" if os.name == "nt" else ""))
-    shutil.copy2(str(exe), str(fake))
-    proc = subprocess.Popen([str(fake), "-c", "import time; time.sleep(60)"])
+    if os.name == "nt":
+        # python.exe needs its DLLs, so the copy must sit next to it.
+        exe = Path(sys.executable).resolve()
+        fake = exe.with_name("claude.exe")
+        shutil.copy2(str(exe), str(fake))
+        cmd = [str(fake), "-c", "import time; time.sleep(60)"]
+    else:
+        fake = tmp_path / "bin" / "claude"
+        fake.parent.mkdir()
+        shutil.copy2("/bin/sleep", str(fake))
+        cmd = [str(fake), "60"]
+    proc = subprocess.Popen(cmd)
     try:
         found = []
         for _ in range(20):
@@ -863,6 +878,10 @@ def test_detects_a_real_process_named_claude(tmp_path):
             if found:
                 break
             time.sleep(0.5)
+        if not found and os.name != "nt":
+            for fmt in ("comm=", "args="):
+                out = subprocess.run(["ps", "-p", str(proc.pid), "-o", fmt], capture_output=True, text=True).stdout
+                print("ps -o %s -> %r" % (fmt, out))
         assert found and found[0].kind == "cli", cs.scan_processes()
         home = tmp_path / "home"
         home.mkdir()
@@ -875,10 +894,11 @@ def test_detects_a_real_process_named_claude(tmp_path):
     finally:
         proc.kill()
         proc.wait()
-        try:
-            fake.unlink()
-        except OSError:
-            pass
+        if os.name == "nt":
+            try:
+                fake.unlink()
+            except OSError:
+                pass
 
 
 def test_desktop_session_list_switches_with_the_profile(home):
