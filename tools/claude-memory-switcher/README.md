@@ -32,9 +32,14 @@
 第一次按「一鍵切換」時，目前的 Claude Code 會被保存成設定檔 **original**（舊記憶），
 並建立、切換到全新的設定檔 **clean**（乾淨版）。之後每按一次就在兩者之間來回切換。
 
-> **macOS 第一次開啟**：若出現「無法打開，因為它來自未識別的開發者」，請在檔案上按右鍵 →「打開」。
-> 或在終端機執行 `xattr -d com.apple.quarantine *.command`。
-> 若提示要安裝「命令列開發者工具」，照著安裝即可（它內含 Python 3）。
+> **macOS 第一次開啟**（從網路下載的檔案會被 Gatekeeper 擋下）：
+> - **macOS 15（Sequoia）以後**：先雙擊一次，看到「無法驗證…」的提示後按「完成」；接著打開
+>   **系統設定 → 隱私權與安全性**，往下捲到「已阻擋…」那一行按 **「強制打開」**（需要輸入密碼，
+>   約一小時內有效），再雙擊一次即可。右鍵 →「打開」在 macOS 15 以後已經沒有用了。
+> - **macOS 14 以前**：在檔案上按右鍵 →「打開」。
+> - 或用終端機一次解除整個資料夾：輸入 `xattr -dr com.apple.quarantine `（最後有一個空白），
+>   再把 `claude-memory-switcher` 資料夾拖進終端機視窗，按 Enter。
+> - 若提示要安裝「命令列開發者工具」，照著安裝即可（它內含 Python 3）。
 >
 > **Windows**：需要先安裝 [Python 3](https://www.python.org/downloads/)，安裝時勾選
 > 「Add python.exe to PATH」。
@@ -53,7 +58,10 @@
   [5] 複製一個設定檔…
   [6] 匯出（備份）設定檔成 zip…
   ...
+  [x] 把目前的設定檔「original」清空成乾淨狀態（舊內容移到垃圾桶）…
 ```
+
+清空（`[x]` 或 `reset`）一定會先問你；舊內容會先放進垃圾桶，不會直接刪除。
 
 ---
 
@@ -81,16 +89,17 @@ Claude Code 的個人狀態放在下面這些地方，這個工具會把它們**
 | `~/.claude/.device-keys.json`、`~/.claude/chrome/` | 這台電腦的裝置識別，以及 Claude in Chrome 擴充功能的連接程式（瀏覽器指向這個路徑） |
 | `~/.local/bin/claude`、`~/.local/share/claude/`、Homebrew／WinGet／npm 安裝 | 程式本體，本來就不在 `~/.claude` 裡，完全不碰 |
 
-### 本來就不在這兩個位置、所以不受影響的東西
+### 不在上面這些位置、所以不受影響的東西
 
-執行 `doctor`（選單 `[s]`）會列出你電腦上實際存在的這些項目：
+執行 `doctor`（選單 `[s]`）會檢查前四項在你電腦上是否存在並列出來；後面幾項它不會檢查，請自行留意：
 
 - **專案資料夾裡的** `CLAUDE.md`、`CLAUDE.local.md`、`.claude/`、`.mcp.json`：屬於各個專案，乾淨版在那個專案裡仍會讀到它們。
-- 用 `autoMemoryDirectory` 設定把自動記憶放在別處時，那個資料夾不會被切換。
-- 環境變數 `ANTHROPIC_API_KEY`、`CLAUDE_CODE_OAUTH_TOKEN`：終端機版在任何設定檔都會用它登入。
+  `doctor` 會列出任何一個設定檔用過的專案裡有哪些這類檔案（切到乾淨版後也會直接列出來）。
+- 用 `autoMemoryDirectory` 設定（或 `CLAUDE_CODE_REMOTE_MEMORY_DIR`）把自動記憶放在別處時，那個資料夾不會被切換。
+- 終端機的環境變數 `ANTHROPIC_API_KEY`、`ANTHROPIC_AUTH_TOKEN`、`CLAUDE_CODE_OAUTH_TOKEN`、`ANTHROPIC_BASE_URL`：終端機版在任何設定檔都會用它們。
 - Claude Desktop 自己的登入、設定 `claude_desktop_config.json`（Desktop 的 MCP 伺服器，也會提供給 Code 分頁），以及 Cowork 的工作階段與記憶。
-- Windows 上 Desktop 的 WSL 工作階段用的是 WSL 裡的 `~/.claude`：想連它一起切換，請在 WSL 裡也執行一次這個工具。
-- 公司／組織的管理設定（managed settings）。
+- （不檢查）Windows 上 Desktop 的 WSL 工作階段用的是 WSL 裡的 `~/.claude`：想連它一起切換，請在 WSL 裡也執行一次這個工具。
+- （不檢查）公司／組織的管理設定（managed settings）。
 - **claude.ai 網頁／App 的聊天記憶、Projects、連接器（connectors）**：存在 Anthropic 伺服器上，不在你的電腦裡。
   同一個帳號登入時，claude.ai 上啟用的技能和外掛會再同步下來；想要完全乾淨，建立設定檔時加
   `--no-account-sync`（或在選單回答「是」），工具會在乾淨版的 `settings.json` 設定
@@ -104,7 +113,7 @@ Claude Code 的個人狀態放在下面這些地方，這個工具會把它們**
 python3 claude_switch.py                  # 互動選單
 python3 claude_switch.py clean            # 保存目前狀態，切到乾淨版（第一次會建立）
 python3 claude_switch.py clean --reset    # 把乾淨版再清空一次（舊內容移到垃圾桶）
-python3 claude_switch.py toggle           # 在最近兩個設定檔之間切換
+python3 claude_switch.py toggle           # 在最近兩個設定檔之間切換（只有一個設定檔時＝切到乾淨版）
 python3 claude_switch.py switch original  # 切到指定設定檔
 python3 claude_switch.py status           # 列出設定檔、大小、目前使用哪一個
 python3 claude_switch.py new work --copy settings.json --copy agents   # 新的乾淨設定檔，帶上部分設定
@@ -115,7 +124,8 @@ python3 claude_switch.py rename clean 乾淨版
 python3 claude_switch.py delete old-test  # 移到垃圾桶（不能刪除使用中的）
 python3 claude_switch.py trash --empty    # 真正刪除垃圾桶
 python3 claude_switch.py doctor           # 哪些東西不會被切換
-python3 claude_switch.py repair           # 修復中斷的切換
+python3 claude_switch.py repair           # 修復中斷的切換（會問你要「完成」還是「還原」；
+                                          #   也可加 --forward / --rollback；非互動時預設還原）
 python3 claude_switch.py where            # 顯示各個路徑
 ```
 
@@ -131,7 +141,10 @@ python3 claude_switch.py where            # 顯示各個路徑
 | `--store DIR` | 設定檔倉庫位置（預設 `~/.claude-profiles`，也可用環境變數 `CLAUDE_SWITCH_HOME`；必須和 `~/.claude` 在同一個磁碟） |
 | `--lang zh` / `--lang en` | 介面語言（預設依系統語言；也可設環境變數 `CLAUDE_SWITCH_LANG`） |
 | `--keep-api-settings` / `--no-api-settings` | 建立乾淨設定檔時，是否保留 API 供應商設定（`ANTHROPIC_BASE_URL`、金鑰、`apiKeyHelper`、代理伺服器；cc-switch 寫的就是這些）。沒指定時，偵測到就會問你 |
-| `-y` | 不要詢問確認 |
+| `-y` / `--yes` | 不要詢問確認 |
+
+選項放在指令前面或後面都可以，例如 `trash --empty --yes` 和 `--yes trash --empty` 一樣。
+`--dry-run` 適用於 `switch`、`toggle`、`clean`、`new`、`clone`、`reset`、`repair`，其他指令加了會直接拒絕。
 
 ---
 
@@ -150,19 +163,26 @@ python3 claude_switch.py where            # 顯示各個路徑
 - **重置、刪除都先進垃圾桶**：`~/.claude-profiles/_trash/`。
 - **設定位置被改過會拒絕**：若 `CLAUDE_CONFIG_DIR` 和第一次使用時不同，不會亂搬（可用 `--force`）。
 - **不會同時執行兩個**：有鎖定檔保護。
-- **匯出不含登入憑證**，`claude.json` 裡的 API 金鑰預設也會移除；匯入時會擋掉 zip 路徑穿越攻擊。
+- **匯出不含登入憑證**；`claude.json`、`settings.json` 裡看得出是金鑰或權杖的值（包括 MCP 伺服器的 env 與 headers）
+  預設會改成 `<redacted>`。對話紀錄裡仍可能有你貼過的機密，請妥善保管 zip。匯入時會擋掉 zip 路徑穿越攻擊。
 
 倉庫結構：
 
 ```
 ~/.claude-profiles/
-  switcher.json            目前使用哪個設定檔、各設定檔資訊、進行中的切換日誌
+  switcher.json(.bak)      目前使用哪個設定檔、各設定檔資訊、進行中的切換日誌（.bak 是上一版）
   switch.log               操作紀錄
   profiles/
-    original/              ← 沒在使用時，這裡放它的 ~/.claude 內容（config/）和 ~/.claude.json（claude.json）
-    clean/                 ← 使用中的設定檔，這裡是空的（它的內容就在 ~/.claude）
+    original/              ← 沒在使用時放它的內容：
+      config/                ~/.claude 裡的東西
+      claude.json            ~/.claude.json（以及 claude.json.backup 等）
+      home/                  ~/CLAUDE.md、~/CLAUDE.local.md
+      desktop/<mac|win|…>/   Claude Desktop 的 Code 工作階段清單
+    clean/                 ← 使用中的設定檔，這裡是空的（它的內容就在原本的位置）
   _trash/  _conflicts/
 ```
+
+`~/.claude/.claude-switch.json` 是工具寫的小標記，記錄目前的內容屬於哪個設定檔，用來避免弄混；可以放心留著。
 
 ---
 
@@ -194,6 +214,9 @@ Desktop 自己的登入不受影響，所以 Desktop 裡的乾淨版一樣是登
 **出錯了怎麼辦？** 先執行 `python3 claude_switch.py repair`。所有操作都記錄在 `~/.claude-profiles/switch.log`。
 沒有任何檔案會被刪除，最壞情況也只是檔案在 `~/.claude-profiles/` 裡等你搬回來。
 
+**備份檔要還原成另一個名稱？** 選單的「從 zip 匯入」發現名稱重複時會請你取新名字（預設 `<名稱>-restored`）；
+在 macOS 可以直接把 zip 從 Finder 拖進終端機視窗。
+
 ---
 
 ## 開發
@@ -217,6 +240,9 @@ applies to the terminal CLI, the IDE extensions and the Code tab of **Claude Des
 `~/.claude/` and `~/.claude.json`.
 
 - Double-click `claude-switch-menu.*` for the menu or `claude-switch-toggle.*` for one-click clean ⇄ original.
+  On macOS 15+, a downloaded `.command` is blocked the first time: allow it in System Settings → Privacy &
+  Security → "Open Anyway" (right-click → Open no longer works there), or run `xattr -dr com.apple.quarantine`
+  on the folder.
 - CLI: `python3 claude_switch.py clean | toggle | switch NAME | status | new | clone | export | import | doctor | repair`.
 - Switching only **renames** files into `~/.claude-profiles/profiles/<name>/`. Nothing is copied or deleted.
   Every move is journaled first. On a failure, the moves done so far are undone in reverse order. After a crash,
@@ -236,5 +262,7 @@ applies to the terminal CLI, the IDE extensions and the Code tab of **Claude Des
   API-key environment variables, Claude Desktop's own `claude_desktop_config.json`, managed settings, and
   anything server-side (claude.ai chat memory, connectors, synced skills/plugins). `doctor` lists what applies
   to your machine. `--no-account-sync` turns off claude.ai skill/plugin/connector sync in a clean profile.
+- Options work before or after the command. `--dry-run` changes nothing (switch, toggle, clean, new, clone, reset,
+  repair). Reset always asks first and moves the old contents to the trash.
 - Zero dependencies, Python 3.8+, macOS / Windows / Linux. Tests:
   `python3 -m pytest tools/claude-memory-switcher -q`.

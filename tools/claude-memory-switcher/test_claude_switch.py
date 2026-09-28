@@ -1216,6 +1216,177 @@ def test_apply_settings_merges_env(tmp_path):
     assert json.loads(f.read_text()) == {"env": {"A": "1", "B": "2"}, "x": 1, "y": 2}
 
 
+# --------------------------------------------------------------------------
+# findings from the adversarial review (UX / docs / macOS lenses)
+# --------------------------------------------------------------------------
+
+
+def test_dry_run_never_writes(home, tmp_path):
+    populate(home)
+    before = live_snapshot(home)
+    paths = P(home)
+    no = lambda: []  # noqa: E731
+    assert cs.main(["switch", "original", "--dry-run"], proc_finder=no) == 0
+    assert cs.main(["--dry-run", "reset", "original"], proc_finder=no) == 0
+    assert cs.main(["toggle", "--dry-run"], proc_finder=no) == 0
+    assert not paths.store.exists() and live_snapshot(home) == before
+    cs.clean(paths, opts())
+    snap = snapshot(paths.store)
+    assert cs.main(["new", "work", "--dry-run"], proc_finder=no) == 0
+    assert cs.main(["clone", "original", "c1", "--dry-run"], proc_finder=no) == 0
+    assert cs.main(["export", "original", "--dry-run"], proc_finder=no) == 2  # not supported: refused
+    assert not paths.profile_dir("work").exists() and not paths.profile_dir("c1").exists()
+    # repair --dry-run shows, does not repair
+    state = cs.load_state(paths)
+    plan = cs.plan_switch(paths, state, "original")
+
+    def boom(i):
+        if i == 3:
+            raise KeyboardInterrupt
+
+    import pytest as _pt
+    orig_rb = cs._rollback
+    cs._rollback = lambda *a: (_ for _ in ()).throw(RuntimeError("crash"))
+    try:
+        with _pt.raises(cs.SwitchError):
+            cs.execute_plan(paths, state, plan, fail_hook=boom)
+    finally:
+        cs._rollback = orig_rb
+    mid = live_snapshot(home)
+    assert cs.main(["repair", "--dry-run"], proc_finder=no) == 0
+    assert live_snapshot(home) == mid and cs.load_state(paths)["journal"] is not None
+    assert cs.main(["repair", "--rollback"], proc_finder=no) == 0
+
+
+def test_toggle_goes_clean_when_only_one_profile(home):
+    populate(home)
+    paths = P(home)
+    cs.init_state(paths)  # e.g. after exporting or browsing the menu first
+    cs.toggle(paths, opts())
+    assert cs.load_state(paths)["active"] == "clean"
+    cs.toggle(paths, opts())
+    assert cs.load_state(paths)["active"] == "original"
+
+
+def test_export_without_setup_does_not_set_up(home, tmp_path):
+    populate(home)
+    paths = P(home)
+    z = cs.export_profile(paths, "original", out=str(tmp_path / "newdir") + os.sep)
+    assert z.parent == tmp_path / "newdir" and z.suffix == ".zip"
+    assert not paths.store.exists()
+    assert not (home / ".claude" / cs.MARKER_FILE).exists()
+
+
+def test_export_redacts_tokens_in_settings_and_mcp(home, tmp_path):
+    populate(home)
+    (home / ".claude" / "settings.json").write_text(json.dumps({
+        "model": "opus", "env": {"ANTHROPIC_API_KEY": "sk-SETTINGS", "ANTHROPIC_BASE_URL": "https://x", "DEBUG": "1"}}))
+    cfg = json.loads((home / ".claude.json").read_text())
+    cfg["mcpServers"] = {"gh": {"command": "gh-mcp", "env": {"GITHUB_TOKEN": "ghp_SECRET", "LOG": "1"}},
+                         "web": {"type": "http", "url": "https://m", "headers": {"Authorization": "Bearer SECRET"}}}
+    (home / ".claude.json").write_text(json.dumps(cfg))
+    (home / ".claude.json.backup").write_text(json.dumps({"primaryApiKey": "sk-BACKUP"}))
+    paths = P(home)
+    z = cs.export_profile(paths, "original", out=str(tmp_path / "r.zip"))
+    with zipfile.ZipFile(z) as zf:
+        blob = b"".join(zf.read(n) for n in zf.namelist() if not n.endswith("/"))
+        settings = json.loads(zf.read("config/settings.json"))
+    for secret in (b"sk-SETTINGS", b"ghp_SECRET", b"Bearer SECRET", b"sk-BACKUP", b"sk-ant-secret"):
+        assert secret not in blob, secret
+    assert settings["env"]["ANTHROPIC_BASE_URL"] == "https://x" and settings["env"]["DEBUG"] == "1"
+    z2 = cs.export_profile(paths, "original", out=str(tmp_path / "s.zip"), include_secrets=True)
+    with zipfile.ZipFile(z2) as zf:
+        assert b"ghp_SECRET" in zf.read("claude.json")
+
+
+def test_import_bad_zip_is_a_clean_error(home, tmp_path):
+    populate(home)
+    paths = P(home)
+    z = cs.export_profile(paths, "original", out=str(tmp_path / "ok.zip"))
+    data = bytearray(z.read_bytes())
+    i = data.find(b"# my global memory")
+    bad = tmp_path / "bad.zip"
+    if i < 0:  # compressed: damage the middle of the archive instead
+        i = len(data) // 3
+    data[i:i + 8] = b"XXXXXXXX"
+    bad.write_bytes(bytes(data))
+    with pytest.raises(cs.SwitchError):
+        cs.import_profile(paths, str(bad), "broken")
+    assert not paths.profile_dir("broken").exists()
+    assert not list(paths.profiles_dir.glob("_import-*"))
+
+
+def test_dragged_paths(tmp_path):
+    f = tmp_path / "My Files" / "b (1).zip"
+    f.parent.mkdir()
+    f.write_text("x")
+    assert cs.dragged_path('"%s"' % f) == str(f)
+    if os.name != "nt":
+        escaped = str(f).replace(" ", "\\ ").replace("(", "\\(").replace(")", "\\)") + " "
+        assert cs.dragged_path(escaped) == str(f)
+
+
+def test_options_before_or_after_command(home):
+    populate(home)
+    no = lambda: []  # noqa: E731
+    assert cs.main(["status", "--lang", "zh"], proc_finder=no) == 0
+    assert cs.main(["--force", "toggle"], proc_finder=no) == 0
+    assert cs.main(["toggle", "--yes", "--force"], proc_finder=no) == 0
+    cs.delete_profile(P(home), "clean", opts())
+    assert cs.main(["trash", "--empty", "--yes"], proc_finder=no) == 0
+    assert cs.main(["--yes", "trash", "--empty"], proc_finder=no) == 0
+
+
+def test_reset_asks_first(home, monkeypatch):
+    populate(home)
+    paths = P(home)
+    cs.clean(paths, opts())
+    (home / ".claude" / "CLAUDE.md").write_text("weeks of work")
+    monkeypatch.setattr("builtins.input", lambda *_: "n")
+    with pytest.raises(cs.SwitchError):
+        cs.reset_profile(paths, "clean", opts(interactive=True, yes=False))
+    assert (home / ".claude" / "CLAUDE.md").read_text() == "weeks of work"
+    monkeypatch.setattr("builtins.input", lambda *_: "y")
+    cs.reset_profile(paths, "clean", opts(interactive=True, yes=False))
+    assert not (home / ".claude" / "CLAUDE.md").exists()
+
+
+def test_doctor_lists_projects_known_to_any_profile_and_not_switched_ones(home):
+    populate(home)
+    proj = home / "proj"
+    proj.mkdir()
+    (proj / "CLAUDE.md").write_text("project memory")
+    (proj / ".mcp.json").write_text("{}")
+    (home / "CLAUDE.md").write_text("home memory")
+    cfg = json.loads((home / ".claude.json").read_text())
+    cfg["projects"] = {str(proj): {}, str(home): {}}
+    (home / ".claude.json").write_text(json.dumps(cfg))
+    paths = P(home)
+    cs.clean(paths, opts())  # the clean profile knows no projects
+    found = [str(p) for p in cs.scan_projects(paths)]
+    assert str(proj / "CLAUDE.md") in found and str(proj / ".mcp.json") in found
+    assert str(home / "CLAUDE.md") not in found and str(home / ".claude") not in found
+
+
+def test_corrupt_state_and_backup_is_a_clean_error(home):
+    populate(home)
+    paths = P(home)
+    cs.clean(paths, opts())
+    paths.state_file.write_text("{")
+    paths.state_file.with_name(cs.STATE_FILE + ".bak").write_text("{")
+    assert cs.main(["status"], proc_finder=lambda: []) == 1
+
+
+def test_clean_warns_when_creation_options_cannot_apply(home, capsys):
+    populate(home)
+    paths = P(home)
+    cs.clean(paths, opts())
+    cs.switch_to(paths, "original", opts())
+    capsys.readouterr()
+    cs.clean(paths, opts(), copy_items=["agents"], no_account_sync=True)
+    assert "already exists" in capsys.readouterr().out
+
+
 def test_messages_have_both_languages_and_matching_fields():
     import string
 
