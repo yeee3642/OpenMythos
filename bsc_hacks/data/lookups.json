@@ -1,0 +1,20 @@
+{
+  "dataset": {
+    "name": "bsc_hacks",
+    "chain_zh": "BNB Smart Chain",
+    "db_file": "bsc_hacks.db"
+  },
+  "chain_scopes": [
+    {
+      "code": "bsc_only",
+      "name_zh": "只有 BNB Smart Chain",
+      "name_en": "BNB Smart Chain only"
+    },
+    {
+      "code": "multi_chain",
+      "name_zh": "多鏈事件（含 BNB Smart Chain 資產）",
+      "name_en": "Multi-chain (includes BNB Smart Chain assets)"
+    }
+  ],
+  "vuln_patterns": "evm"
+}

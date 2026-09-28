@@ -1,4 +1,4 @@
-﻿year,incidents,total_loss_usd,solana_only_loss_usd,total_recovered_usd,largest_loss_usd
+﻿year,incidents,total_loss_usd,single_chain_loss_usd,total_recovered_usd,largest_loss_usd
 2021,7,1966000.0,1966000.0,0,1300000.0
 2022,13,992676000.0,515676000.0,214100000.0,477000000.0
 2023,7,6820000.0,5750000.0,0,4170000.0

@@ -1,0 +1,20 @@
+{
+  "dataset": {
+    "name": "ethereum_hacks",
+    "chain_zh": "Ethereum",
+    "db_file": "ethereum_hacks.db"
+  },
+  "chain_scopes": [
+    {
+      "code": "ethereum_only",
+      "name_zh": "只有以太坊主網",
+      "name_en": "Ethereum only"
+    },
+    {
+      "code": "multi_chain",
+      "name_zh": "多鏈事件（含 Ethereum 資產）",
+      "name_en": "Multi-chain (includes Ethereum assets)"
+    }
+  ],
+  "vuln_patterns": "evm"
+}

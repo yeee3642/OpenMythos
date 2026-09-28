@@ -1,0 +1,201 @@
+{
+  "project_types": [
+    {
+      "code": "bridge",
+      "name_zh": "跨鏈橋",
+      "name_en": "Bridge"
+    },
+    {
+      "code": "lending",
+      "name_zh": "借貸協議",
+      "name_en": "Lending"
+    },
+    {
+      "code": "dex_amm",
+      "name_zh": "去中心化交易所 / AMM",
+      "name_en": "DEX / AMM"
+    },
+    {
+      "code": "perp_derivatives",
+      "name_zh": "永續合約 / 衍生品",
+      "name_en": "Perpetuals / Derivatives"
+    },
+    {
+      "code": "stablecoin",
+      "name_zh": "穩定幣",
+      "name_en": "Stablecoin"
+    },
+    {
+      "code": "yield_vault",
+      "name_zh": "收益金庫",
+      "name_en": "Yield Vault"
+    },
+    {
+      "code": "wallet",
+      "name_zh": "錢包",
+      "name_en": "Wallet"
+    },
+    {
+      "code": "cex",
+      "name_zh": "中心化交易所 / 託管",
+      "name_en": "Centralized Exchange / Custodian"
+    },
+    {
+      "code": "trading_bot",
+      "name_zh": "交易機器人 / 交易終端",
+      "name_en": "Trading Bot / Terminal"
+    },
+    {
+      "code": "nft_gaming",
+      "name_zh": "NFT / 遊戲",
+      "name_en": "NFT / Gaming"
+    },
+    {
+      "code": "launchpad",
+      "name_zh": "發幣平台",
+      "name_en": "Launchpad"
+    },
+    {
+      "code": "dao_governance",
+      "name_zh": "DAO / 治理",
+      "name_en": "DAO / Governance"
+    },
+    {
+      "code": "infrastructure_sdk",
+      "name_zh": "基礎設施 / SDK",
+      "name_en": "Infrastructure / SDK"
+    },
+    {
+      "code": "l1_runtime",
+      "name_zh": "L1 核心 / 客戶端 / 驗證節點",
+      "name_en": "L1 Core / Client / Validator"
+    },
+    {
+      "code": "staking",
+      "name_zh": "質押服務",
+      "name_en": "Staking"
+    },
+    {
+      "code": "other",
+      "name_zh": "其他",
+      "name_en": "Other"
+    }
+  ],
+  "categories": [
+    {
+      "code": "smart_contract_bug",
+      "name_zh": "合約 / 程式邏輯漏洞",
+      "name_en": "Smart Contract / Logic Bug",
+      "description_zh": "智能合約 / 鏈上程式，或平台、錢包、SDK 程式的邏輯錯誤，例如缺少權限或帳戶驗證、重入、數值計算錯誤。"
+    },
+    {
+      "code": "oracle_price_manipulation",
+      "name_zh": "預言機 / 價格操縱",
+      "name_en": "Oracle / Price Manipulation",
+      "description_zh": "操縱低流動性市場或預言機價格，藉此超額借貸或提領。"
+    },
+    {
+      "code": "economic_exploit",
+      "name_zh": "經濟模型攻擊",
+      "name_en": "Economic Exploit",
+      "description_zh": "利用閃電貸、聯合曲線等經濟設計缺陷套利，程式碼本身可能照設計執行。"
+    },
+    {
+      "code": "private_key_compromise",
+      "name_zh": "私鑰外洩 / 盜用",
+      "name_en": "Private Key Compromise",
+      "description_zh": "管理員、熱錢包、跨鏈橋驗證者或使用者的私鑰遭竊取或外洩。"
+    },
+    {
+      "code": "insider_threat",
+      "name_zh": "內部人員作案",
+      "name_en": "Insider Threat",
+      "description_zh": "現任或前任員工、貢獻者濫用權限竊取資金。"
+    },
+    {
+      "code": "supply_chain",
+      "name_zh": "供應鏈攻擊",
+      "name_en": "Supply Chain Attack",
+      "description_zh": "透過被植入後門的套件、函式庫或開發工具竊取私鑰。"
+    },
+    {
+      "code": "phishing_social_engineering",
+      "name_zh": "釣魚 / 社交工程",
+      "name_en": "Phishing / Social Engineering",
+      "description_zh": "誘騙使用者或多簽成員簽署惡意交易、洩漏助記詞，或使用錢包盜取工具 (drainer)。"
+    },
+    {
+      "code": "governance_attack",
+      "name_zh": "治理攻擊",
+      "name_en": "Governance Attack",
+      "description_zh": "透過惡意提案或取得投票權，接管 DAO 金庫或協議權限。"
+    },
+    {
+      "code": "frontend_account_compromise",
+      "name_zh": "前端 / 社群帳號入侵",
+      "name_en": "Frontend / Account Compromise",
+      "description_zh": "官方網站、DNS 或社群媒體帳號遭入侵，用以推廣詐騙代幣或釣魚連結。"
+    },
+    {
+      "code": "third_party_compromise",
+      "name_zh": "第三方服務遭入侵",
+      "name_en": "Third-Party Compromise",
+      "description_zh": "合作的質押、託管、API 或其他外部供應商遭入侵，連帶造成損失。"
+    },
+    {
+      "code": "protocol_vulnerability",
+      "name_zh": "L1 協議層漏洞",
+      "name_en": "Protocol-Level Vulnerability",
+      "description_zh": "區塊鏈 L1 本身的漏洞：驗證節點 / 客戶端、虛擬機與執行環境、共識與網路層；多半在遭利用前即被修補。"
+    },
+    {
+      "code": "dos_attack",
+      "name_zh": "阻斷服務攻擊",
+      "name_en": "Denial-of-Service Attack",
+      "description_zh": "以大量流量或請求癱瘓網站、錢包後端或網路，但沒有利用程式漏洞（若利用了 L1 缺乏流量控管等弱點而造成停擺，歸入 L1 協議層漏洞）。"
+    },
+    {
+      "code": "operational_error",
+      "name_zh": "操作失誤",
+      "name_en": "Operational Error",
+      "description_zh": "非惡意的部署或操作錯誤導致資金遺失或鎖死（非駭客攻擊，僅供參考）。"
+    }
+  ],
+  "recovery_statuses": [
+    {
+      "code": "none",
+      "name_zh": "未追回",
+      "name_en": "None"
+    },
+    {
+      "code": "partial",
+      "name_zh": "部分追回",
+      "name_en": "Partial"
+    },
+    {
+      "code": "full",
+      "name_zh": "全數追回",
+      "name_en": "Full"
+    },
+    {
+      "code": "returned_by_attacker",
+      "name_zh": "攻擊者歸還（通常保留賞金）",
+      "name_en": "Returned by Attacker"
+    },
+    {
+      "code": "reimbursed_by_backer",
+      "name_zh": "由項目方或投資方賠付",
+      "name_en": "Reimbursed by Backer"
+    },
+    {
+      "code": "not_applicable",
+      "name_zh": "不適用（無損失）",
+      "name_en": "Not Applicable"
+    },
+    {
+      "code": "unknown",
+      "name_zh": "不明",
+      "name_en": "Unknown"
+    }
+  ]
+}

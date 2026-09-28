@@ -28,7 +28,7 @@ class CaseLibrary:
     def __init__(self, db_path: Path = DEFAULT_CASE_DB):
         if not Path(db_path).exists():
             raise FileNotFoundError(
-                f"{db_path} not found; run `python solana_hacks/build_db.py` first"
+                f"{db_path} not found; run `python -m hack_db` first"
             )
         self.conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
 

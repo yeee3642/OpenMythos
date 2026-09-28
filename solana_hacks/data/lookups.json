@@ -1,79 +1,20 @@
 {
-  "project_types": [
-    {"code": "bridge", "name_zh": "跨鏈橋", "name_en": "Bridge"},
-    {"code": "lending", "name_zh": "借貸協議", "name_en": "Lending"},
-    {"code": "dex_amm", "name_zh": "去中心化交易所 / AMM", "name_en": "DEX / AMM"},
-    {"code": "perp_derivatives", "name_zh": "永續合約 / 衍生品", "name_en": "Perpetuals / Derivatives"},
-    {"code": "stablecoin", "name_zh": "穩定幣", "name_en": "Stablecoin"},
-    {"code": "yield_vault", "name_zh": "收益金庫", "name_en": "Yield Vault"},
-    {"code": "wallet", "name_zh": "錢包", "name_en": "Wallet"},
-    {"code": "cex", "name_zh": "中心化交易所 / 託管", "name_en": "Centralized Exchange / Custodian"},
-    {"code": "trading_bot", "name_zh": "交易機器人 / 交易終端", "name_en": "Trading Bot / Terminal"},
-    {"code": "nft_gaming", "name_zh": "NFT / 遊戲", "name_en": "NFT / Gaming"},
-    {"code": "launchpad", "name_zh": "發幣平台", "name_en": "Launchpad"},
-    {"code": "dao_governance", "name_zh": "DAO / 治理", "name_en": "DAO / Governance"},
-    {"code": "infrastructure_sdk", "name_zh": "基礎設施 / SDK", "name_en": "Infrastructure / SDK"},
-    {"code": "l1_runtime", "name_zh": "L1 核心 / 執行環境 / 驗證節點", "name_en": "L1 Runtime / Validator"},
-    {"code": "staking", "name_zh": "質押服務", "name_en": "Staking"},
-    {"code": "other", "name_zh": "其他", "name_en": "Other"}
+  "dataset": {
+    "name": "solana_hacks",
+    "chain_zh": "Solana",
+    "db_file": "solana_hacks.db"
+  },
+  "chain_scopes": [
+    {
+      "code": "solana_only",
+      "name_zh": "只有 Solana",
+      "name_en": "Solana only"
+    },
+    {
+      "code": "multi_chain",
+      "name_zh": "多鏈事件（含 Solana 資產）",
+      "name_en": "Multi-chain (includes Solana assets)"
+    }
   ],
-  "categories": [
-    {"code": "smart_contract_bug", "name_zh": "合約 / 程式邏輯漏洞", "name_en": "Smart Contract / Logic Bug", "description_zh": "鏈上程式 (program) 或平台程式的邏輯錯誤，例如缺少帳戶擁有者 / 簽名檢查、驗證繞過、數值捨入錯誤。"},
-    {"code": "oracle_price_manipulation", "name_zh": "預言機 / 價格操縱", "name_en": "Oracle / Price Manipulation", "description_zh": "操縱低流動性市場或預言機價格，藉此超額借貸或提領。"},
-    {"code": "economic_exploit", "name_zh": "經濟模型攻擊", "name_en": "Economic Exploit", "description_zh": "利用閃電貸、聯合曲線等經濟設計缺陷套利，程式碼本身可能照設計執行。"},
-    {"code": "private_key_compromise", "name_zh": "私鑰外洩 / 盜用", "name_en": "Private Key Compromise", "description_zh": "管理員、熱錢包或使用者私鑰遭竊取或外洩。"},
-    {"code": "insider_threat", "name_zh": "內部人員作案", "name_en": "Insider Threat", "description_zh": "現任或前任員工、貢獻者濫用權限竊取資金。"},
-    {"code": "supply_chain", "name_zh": "供應鏈攻擊", "name_en": "Supply Chain Attack", "description_zh": "透過被植入後門的套件、函式庫或開發工具竊取私鑰。"},
-    {"code": "phishing_social_engineering", "name_zh": "釣魚 / 社交工程", "name_en": "Phishing / Social Engineering", "description_zh": "誘騙使用者或多簽成員簽署惡意交易、洩漏助記詞，或使用錢包盜取工具 (drainer)。"},
-    {"code": "governance_attack", "name_zh": "治理攻擊", "name_en": "Governance Attack", "description_zh": "透過惡意提案或取得投票權，接管 DAO 金庫或協議權限。"},
-    {"code": "frontend_account_compromise", "name_zh": "前端 / 社群帳號入侵", "name_en": "Frontend / Account Compromise", "description_zh": "官方網站、DNS 或社群媒體帳號遭入侵，用以推廣詐騙代幣或釣魚連結。"},
-    {"code": "third_party_compromise", "name_zh": "第三方服務遭入侵", "name_en": "Third-Party Compromise", "description_zh": "合作的質押、託管、API 或其他外部供應商遭入侵，連帶造成損失。"},
-    {"code": "protocol_vulnerability", "name_zh": "L1 協議層漏洞", "name_en": "Protocol-Level Vulnerability", "description_zh": "Solana 驗證節點、執行環境或原生程式的漏洞，多半在遭利用前即被修補。"},
-    {"code": "dos_attack", "name_zh": "阻斷服務攻擊", "name_en": "Denial-of-Service Attack", "description_zh": "以大量流量或請求癱瘓網站、錢包後端或網路，但沒有利用程式漏洞（若利用了 L1 缺乏流量控管等弱點而造成停擺，歸入 L1 協議層漏洞）。"},
-    {"code": "operational_error", "name_zh": "操作失誤", "name_en": "Operational Error", "description_zh": "非惡意的部署或操作錯誤導致資金遺失或鎖死（非駭客攻擊，僅供參考）。"}
-  ],
-  "recovery_statuses": [
-    {"code": "none", "name_zh": "未追回", "name_en": "None"},
-    {"code": "partial", "name_zh": "部分追回", "name_en": "Partial"},
-    {"code": "full", "name_zh": "全數追回", "name_en": "Full"},
-    {"code": "returned_by_attacker", "name_zh": "攻擊者歸還（通常保留賞金）", "name_en": "Returned by Attacker"},
-    {"code": "reimbursed_by_backer", "name_zh": "由項目方或投資方賠付", "name_en": "Reimbursed by Backer"},
-    {"code": "not_applicable", "name_zh": "不適用（無損失）", "name_en": "Not Applicable"},
-    {"code": "unknown", "name_zh": "不明", "name_en": "Unknown"}
-  ],
-  "vuln_patterns": [
-    {"code": "account_validation", "name_zh": "帳戶驗證缺失", "name_en": "Missing Account Validation",
-     "description_zh": "Solana 程式的所有帳戶都由呼叫者傳入。若沒有檢查帳戶的 owner、mint、位址（含 sysvar）或與其他帳戶的關聯，攻擊者就能傳入自己建立的偽造帳戶，繞過權限、簽名或抵押檢查。",
-     "defense_zh": "使用 Anchor 的 Account<'info, T>、has_one、address、constraint 等約束，檢查每個帳戶的 owner、mint、PDA 種子與關聯；sysvar 應核對其固定位址；抵押品帳戶鏈要從可信任的根帳戶逐層驗證。"},
-    {"code": "reinitialization", "name_zh": "重複初始化", "name_en": "Re-initialization",
-     "description_zh": "初始化指令沒有確認帳戶是否已初始化，攻擊者可覆寫既有帳戶或注入預先初始化的帳戶，把自己設為管理權限。",
-     "defense_zh": "使用 Anchor 的 init 約束（帳戶已存在時會失敗），或在初始化時檢查 is_initialized 旗標與帳戶 discriminator；謹慎使用 init_if_needed。"},
-    {"code": "arithmetic", "name_zh": "數值計算錯誤（捨入 / 溢位）", "name_en": "Arithmetic Error (Rounding / Overflow)",
-     "description_zh": "整數捨入方向錯誤或未檢查溢位。Solana 手續費低，攻擊者可大量重複微小的套利操作，或用溢位值破壞程式邏輯。",
-     "defense_zh": "使用 checked_add、checked_mul 等 checked 運算；依操作方向明確選擇 floor / ceil，讓捨入永遠對協議有利；release 版本也啟用 overflow-checks。"},
-    {"code": "control_flow", "name_zh": "控制流程錯誤", "name_en": "Control-Flow Error",
-     "description_zh": "迴圈或分支邏輯在特殊輸入下提前結束或跳過檢查，例如遇到預設值就 break，導致部分資料沒有被計入健康度或權限檢查。",
-     "defense_zh": "迴圈中遇到特殊值應使用 continue 或 filter，而非 break / take_while；為空帳戶、預設 Pubkey 等邊界情況撰寫測試並進行模糊測試（fuzzing）。"},
-    {"code": "race_condition", "name_zh": "競態條件", "name_en": "Race Condition",
-     "description_zh": "同時送出的多筆請求讀到相同狀態，造成重複入帳或重複扣款失效，常見於鏈下市場、帳本與提領服務。",
-     "defense_zh": "餘額更新使用資料庫交易與列鎖，或採用冪等設計；提領前與鏈上資料對帳。"},
-    {"code": "crypto_verification", "name_zh": "密碼學驗證缺陷", "name_en": "Cryptographic Verification Flaw",
-     "description_zh": "零知識證明或簽章驗證的實作不完整，例如 Fiat-Shamir transcript 漏掉部分輸入、接受小階（small-order）公鑰，使攻擊者能偽造可通過驗證的證明或簽章。",
-     "defense_zh": "Fiat-Shamir transcript 必須納入所有公開輸入與證明者訊息；拒絕小階點與非標準編碼；密碼學元件需專門審計，並盡量採用形式化驗證。"},
-    {"code": "input_handling_dos", "name_zh": "輸入處理不當（節點崩潰 / 阻斷服務）", "name_en": "Unsafe Input Handling (Crash / DoS)",
-     "description_zh": "驗證節點處理外部輸入（網路封包、ELF 程式檔、投票、gossip 訊息）時缺乏檢查，特製輸入就能讓節點崩潰或干擾共識。",
-     "defense_zh": "對所有外部輸入做完整的格式與邊界檢查，避免 unwrap() 或 panic；持續進行模糊測試；維持多個驗證節點客戶端（Agave、Firedancer），降低單一實作漏洞的衝擊。"},
-    {"code": "resource_exhaustion", "name_zh": "資源耗盡（交易洪水 / 缺乏流量控管）", "name_en": "Resource Exhaustion (Spam / Missing QoS)",
-     "description_zh": "攻擊者或機器人大量送出交易，耗盡驗證節點的記憶體、頻寬或處理能力，導致網路壅塞甚至停擺。常見於熱門 IDO 或 NFT 鑄造。",
-     "defense_zh": "協議層採用優先費市場、依質押加權的 QoS 與 QUIC 流量控管；應用層避免「先搶先贏」的鑄造設計，並對失敗交易收取費用（例如 Metaplex 的 bot tax）。"},
-    {"code": "consensus_state_bug", "name_zh": "共識 / 狀態處理錯誤", "name_en": "Consensus / State-Handling Bug",
-     "description_zh": "驗證節點在處理分叉、重複區塊、交易重放或程式快取時的狀態邏輯錯誤，使節點之間無法達成共識或卡住，導致網路停止出塊。",
-     "defense_zh": "對分叉選擇、重複區塊與快取邏輯做形式化分析與壓力測試；多客戶端實作交叉驗證；準備快速協調重啟與修補的流程。"},
-    {"code": "offchain_logic", "name_zh": "鏈下系統邏輯缺陷", "name_en": "Off-chain Logic Flaw",
-     "description_zh": "漏洞位於平台的鏈下索引器、API 或後端，而不是鏈上程式，例如集合驗證錯誤或 SQL 注入。",
-     "defense_zh": "鏈下 API 同樣需要權限控管與輸入驗證（例如參數化查詢防 SQL 注入）；NFT 集合、所有權等資訊應以鏈上資料交叉驗證。"},
-    {"code": "undisclosed", "name_zh": "細節未公開", "name_en": "Undisclosed",
-     "description_zh": "項目方確認是程式邏輯漏洞，但沒有公開足夠的技術細節可以歸類。",
-     "defense_zh": "無法給出具體建議；可參考其他模式的一般防禦措施。"}
-  ]
+  "vuln_patterns": "solana"
 }

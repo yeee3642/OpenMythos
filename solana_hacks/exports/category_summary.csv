@@ -1,4 +1,4 @@
-﻿category,category_zh,incidents,total_loss_usd,solana_only_loss_usd
+﻿category,category_zh,incidents,total_loss_usd,single_chain_loss_usd
 private_key_compromise,私鑰外洩 / 盜用,14,764260000.0,103560000.0
 smart_contract_bug,合約 / 程式邏輯漏洞,14,401091000.0,392361000.0
 phishing_social_engineering,釣魚 / 社交工程,8,350770000.0,339270000.0

@@ -1,5 +1,5 @@
--- Solana 生態系資安事件資料庫 (SQLite)
--- 由 build_db.py 讀取 data/*.json 後建立；請勿手動修改產生出的 .db 檔。
+-- 區塊鏈資安事件案例庫 (SQLite)，Solana / Ethereum / BSC 共用
+-- 由 hack_db 讀取各案例庫的 data/*.json 後建立；請勿手動修改產生出的 .db 檔。
 
 PRAGMA foreign_keys = ON;
 
@@ -24,6 +24,19 @@ CREATE TABLE recovery_statuses (
     code     TEXT PRIMARY KEY,
     name_zh  TEXT NOT NULL,
     name_en  TEXT NOT NULL
+);
+
+-- 事件範圍：只影響本鏈，或是多鏈事件的一部分
+CREATE TABLE chain_scopes (
+    code     TEXT PRIMARY KEY,
+    name_zh  TEXT NOT NULL,
+    name_en  TEXT NOT NULL
+);
+
+-- 案例庫中繼資料（鏈名稱等）
+CREATE TABLE dataset_info (
+    key    TEXT PRIMARY KEY,
+    value  TEXT NOT NULL
 );
 
 -- 邏輯漏洞模式（只套用於 smart_contract_bug 與 protocol_vulnerability 類別）
@@ -53,7 +66,7 @@ CREATE TABLE incidents (
     recovered_usd    REAL CHECK (recovered_usd IS NULL OR recovered_usd >= 0),
     recovery_status  TEXT NOT NULL REFERENCES recovery_statuses (code),
     attribution      TEXT NOT NULL,
-    chain_scope      TEXT NOT NULL CHECK (chain_scope IN ('solana_only', 'multi_chain')),
+    chain_scope      TEXT NOT NULL REFERENCES chain_scopes (code),
     summary_zh       TEXT NOT NULL,
     root_cause_zh    TEXT NOT NULL,
     aftermath_zh     TEXT NOT NULL,
@@ -108,6 +121,7 @@ SELECT
     i.assets_stolen,
     i.attribution,
     i.chain_scope,
+    cs.name_zh                                               AS chain_scope_zh,
     i.summary_zh,
     i.root_cause_zh,
     i.aftermath_zh,
@@ -118,17 +132,18 @@ FROM incidents i
 JOIN project_types     pt ON pt.code = i.project_type
 JOIN categories        c  ON c.code  = i.category
 JOIN recovery_statuses rs ON rs.code = i.recovery_status
+JOIN chain_scopes      cs ON cs.code = i.chain_scope
 LEFT JOIN vuln_patterns vp ON vp.code = i.vuln_pattern;
 
 -- 年度統計
--- total_loss_usd 含多鏈事件的全部損失；solana_only_loss_usd 只計純 Solana 事件。
+-- total_loss_usd 含多鏈事件的全部損失；single_chain_loss_usd 只計單鏈（非 multi_chain）事件。
 CREATE VIEW v_yearly_summary AS
 SELECT
     year,
     COUNT(*)                                        AS incidents,
     SUM(COALESCE(loss_usd, 0))                      AS total_loss_usd,
-    SUM(CASE WHEN chain_scope = 'solana_only'
-             THEN COALESCE(loss_usd, 0) ELSE 0 END) AS solana_only_loss_usd,
+    SUM(CASE WHEN chain_scope != 'multi_chain'
+             THEN COALESCE(loss_usd, 0) ELSE 0 END) AS single_chain_loss_usd,
     SUM(COALESCE(recovered_usd, 0))                 AS total_recovered_usd,
     MAX(loss_usd)                                   AS largest_loss_usd
 FROM v_incidents
@@ -142,8 +157,8 @@ SELECT
     category_zh,
     COUNT(*)                                        AS incidents,
     SUM(COALESCE(loss_usd, 0))                      AS total_loss_usd,
-    SUM(CASE WHEN chain_scope = 'solana_only'
-             THEN COALESCE(loss_usd, 0) ELSE 0 END) AS solana_only_loss_usd
+    SUM(CASE WHEN chain_scope != 'multi_chain'
+             THEN COALESCE(loss_usd, 0) ELSE 0 END) AS single_chain_loss_usd
 FROM v_incidents
 GROUP BY category, category_zh
 ORDER BY total_loss_usd DESC;
@@ -155,8 +170,8 @@ SELECT
     project_type_zh,
     COUNT(*)                                        AS incidents,
     SUM(COALESCE(loss_usd, 0))                      AS total_loss_usd,
-    SUM(CASE WHEN chain_scope = 'solana_only'
-             THEN COALESCE(loss_usd, 0) ELSE 0 END) AS solana_only_loss_usd
+    SUM(CASE WHEN chain_scope != 'multi_chain'
+             THEN COALESCE(loss_usd, 0) ELSE 0 END) AS single_chain_loss_usd
 FROM v_incidents
 GROUP BY project_type, project_type_zh
 ORDER BY total_loss_usd DESC;

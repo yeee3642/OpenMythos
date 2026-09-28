@@ -1,0 +1,100 @@
+[
+  {
+    "code": "reentrancy",
+    "name_zh": "重入攻擊",
+    "name_en": "Reentrancy",
+    "description_zh": "合約在更新狀態前就呼叫外部合約，攻擊者在回呼中重複進入同一或相關函式（包括跨函式重入與唯讀重入），重複提領或讀到錯誤價格。",
+    "defense_zh": "遵守 checks-effects-interactions 順序、使用 ReentrancyGuard；留意 ERC-777 / ERC-721 / ERC-1155 的回呼；其他協議讀取你的價格時，也要防範唯讀重入。"
+  },
+  {
+    "code": "access_control",
+    "name_zh": "權限控管缺失",
+    "name_en": "Missing Access Control",
+    "description_zh": "管理、初始化、鑄幣、提領或 selfdestruct 等敏感函式沒有限制呼叫者，任何人都能執行。",
+    "defense_zh": "所有敏感函式都加上角色檢查（onlyOwner / AccessControl）；部署與升級時用自動化測試檢查每個 external 函式的權限。"
+  },
+  {
+    "code": "input_validation",
+    "name_zh": "輸入驗證缺失 / 任意外部呼叫",
+    "name_en": "Missing Input Validation / Arbitrary Call",
+    "description_zh": "合約未驗證使用者提供的地址、calldata 或呼叫目標，攻擊者可讓合約代為呼叫任意合約，例如轉走使用者先前授權給該合約的代幣。",
+    "defense_zh": "限制可呼叫的目標與函式選擇器白名單；不要讓持有使用者授權的合約執行任意 calldata；提醒使用者撤銷不再需要的授權。"
+  },
+  {
+    "code": "signature_message_verification",
+    "name_zh": "簽章 / 跨鏈訊息驗證缺陷",
+    "name_en": "Signature / Cross-Chain Message Verification Flaw",
+    "description_zh": "簽章或跨鏈訊息的驗證不完整，例如缺少 nonce / chainId 導致重放、ecrecover 回傳零地址未檢查、跨鏈橋接受偽造或未證明的訊息。",
+    "defense_zh": "採用 EIP-712 並納入 nonce、chainId 與期限；檢查 ecrecover 結果非零；跨鏈訊息必須驗證來源證明，並對大額提領設定延遲與上限。"
+  },
+  {
+    "code": "arithmetic",
+    "name_zh": "數值計算錯誤（溢位 / 捨入 / 精度）",
+    "name_en": "Arithmetic Error (Overflow / Rounding / Precision)",
+    "description_zh": "整數溢位、捨入方向錯誤、精度損失，或金庫份額在初始時可被「捐贈」操縱（ERC-4626 通膨攻擊、Compound 分叉的空市場攻擊）。",
+    "defense_zh": "使用 Solidity 0.8 以上的內建溢位檢查或 SafeMath；捨入永遠對協議有利；新市場上線時預先存入初始流動性或使用虛擬份額。"
+  },
+  {
+    "code": "business_logic",
+    "name_zh": "業務邏輯錯誤",
+    "name_en": "Business Logic Flaw",
+    "description_zh": "程式照寫的執行，但業務流程設計有誤，例如某個函式漏掉健康度檢查、獎勵或清算公式錯誤、狀態轉換順序錯誤。",
+    "defense_zh": "為每個會改變資產或負債的函式列出不變量（invariant）並做模糊測試與形式化驗證；新功能上線前重新審計整個流程而不只是差異。"
+  },
+  {
+    "code": "proxy_upgrade",
+    "name_zh": "代理合約 / 初始化 / 升級錯誤",
+    "name_en": "Proxy / Initialization / Upgrade Error",
+    "description_zh": "未初始化的實作合約可被任何人接管、儲存槽衝突、升級時設定錯誤（例如把零值設為可信根），或函式庫合約被 selfdestruct。",
+    "defense_zh": "在實作合約的建構子呼叫 _disableInitializers；使用標準化儲存槽（EIP-1967）；升級前在分叉環境演練並檢查所有初始化參數。"
+  },
+  {
+    "code": "compiler_bug",
+    "name_zh": "編譯器 / 語言漏洞",
+    "name_en": "Compiler / Language Bug",
+    "description_zh": "合約原始碼正確，但編譯器產生的位元組碼有缺陷，例如特定 Vyper 版本的重入鎖失效。",
+    "defense_zh": "追蹤編譯器安全公告；關鍵合約避免使用過新或有已知問題的版本；以位元組碼層級的測試驗證安全機制確實生效。"
+  },
+  {
+    "code": "crypto_verification",
+    "name_zh": "密碼學實作缺陷",
+    "name_en": "Cryptographic Implementation Flaw",
+    "description_zh": "零知識證明、簽章函式庫或隨機數產生的實作錯誤，使攻擊者能偽造證明、推導私鑰或預測隨機數。",
+    "defense_zh": "使用經審計的密碼學函式庫；不要在鏈上以區塊資料產生隨機數；ZK 電路需要專門審計與形式化驗證。"
+  },
+  {
+    "code": "input_handling_dos",
+    "name_zh": "節點輸入處理不當（崩潰 / 阻斷服務）",
+    "name_en": "Unsafe Input Handling (Crash / DoS)",
+    "description_zh": "以太坊執行層或共識層客戶端處理特製的區塊、交易或網路訊息時崩潰或卡住。",
+    "defense_zh": "客戶端持續做模糊測試與差異測試；維持客戶端多樣性，避免單一客戶端漏洞影響多數節點。"
+  },
+  {
+    "code": "consensus_state_bug",
+    "name_zh": "共識 / 客戶端狀態錯誤",
+    "name_en": "Consensus / Client State Bug",
+    "description_zh": "客戶端之間對同一區塊的執行結果不一致而造成鏈分叉，或共識層狀態處理錯誤導致最終性中斷。",
+    "defense_zh": "跨客戶端的一致性測試；主要客戶端的市占率不宜超過 1/3；準備快速協調升級的流程。"
+  },
+  {
+    "code": "resource_exhaustion",
+    "name_zh": "資源耗盡（Gas 定價錯誤）",
+    "name_en": "Resource Exhaustion (Gas Mispricing)",
+    "description_zh": "某些操作的 Gas 費用遠低於實際運算或 I/O 成本，攻擊者能以低成本讓節點變慢或停擺。",
+    "defense_zh": "依實測成本調整 opcode 的 Gas 定價（如 EIP-150、EIP-2929）；為節點設定資源上限與監控。"
+  },
+  {
+    "code": "offchain_logic",
+    "name_zh": "鏈下系統邏輯缺陷",
+    "name_en": "Off-chain Logic Flaw",
+    "description_zh": "漏洞位於平台的鏈下後端、API、錢包或前端程式，而不是智能合約。",
+    "defense_zh": "鏈下 API 同樣需要權限控管與輸入驗證；錢包與前端要清楚顯示交易內容，避免盲簽。"
+  },
+  {
+    "code": "undisclosed",
+    "name_zh": "細節未公開",
+    "name_en": "Undisclosed",
+    "description_zh": "確認是程式邏輯漏洞，但項目方沒有公開足夠的技術細節可以歸類。",
+    "defense_zh": "無法給出具體建議；可參考其他模式的一般防禦措施。"
+  }
+]

@@ -20,20 +20,20 @@ SELECT date, project, chain_scope, printf('$%,d', loss_usd) AS loss
 -- 2. 年度統計（事件數、總損失、純 Solana 損失、追回金額）
 SELECT year, incidents,
        printf('$%,d', total_loss_usd)       AS total_loss,
-       printf('$%,d', solana_only_loss_usd) AS solana_only_loss,
+       printf('$%,d', single_chain_loss_usd) AS solana_only_loss,
        printf('$%,d', total_recovered_usd)  AS total_recovered
   FROM v_yearly_summary;
 
 -- 3. 依攻擊類別統計
 SELECT category_zh, incidents,
        printf('$%,d', total_loss_usd)       AS total_loss,
-       printf('$%,d', solana_only_loss_usd) AS solana_only_loss
+       printf('$%,d', single_chain_loss_usd) AS solana_only_loss
   FROM v_category_summary;
 
 -- 4. 依專案類型統計
 SELECT project_type_zh, incidents,
        printf('$%,d', total_loss_usd)       AS total_loss,
-       printf('$%,d', solana_only_loss_usd) AS solana_only_loss
+       printf('$%,d', single_chain_loss_usd) AS solana_only_loss
   FROM v_project_type_summary;
 
 -- 5. 私鑰外洩、內部人員、釣魚、供應鏈等「非合約漏洞」造成的損失

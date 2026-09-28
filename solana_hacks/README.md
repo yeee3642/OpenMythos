@@ -76,9 +76,8 @@
 solana_hacks/
 ├── data/
 │   ├── incidents.json     # 事件原始資料（唯一需要手動編輯的檔案）
-│   └── lookups.json       # 代碼表：攻擊類別、專案類型、追回狀態、邏輯漏洞模式
-├── schema.sql             # SQLite 資料表與檢視表定義
-├── build_db.py            # 驗證資料 → 建立 solana_hacks.db → 匯出 CSV
+│   └── lookups.json       # 本鏈設定：事件範圍代碼、漏洞模式家族（共用代碼表在 hack_db/）
+├── build_db.py            # 相容舊用法，等同 python -m hack_db solana_hacks
 ├── queries.sql            # 常用查詢範例
 ├── solana_hacks.db        # 建置好的 SQLite 資料庫
 └── exports/               # CSV 匯出（UTF-8 BOM，Excel 可直接開啟中文）
@@ -93,10 +92,10 @@ solana_hacks/
 
 ```bash
 # 重新建置資料庫與 CSV（只需 Python 3.10+ 標準函式庫）
-python solana_hacks/build_db.py
+python -m hack_db solana_hacks        # 或 python -m hack_db 建置所有鏈
 
 # 執行資料驗證測試
-pytest tests/test_solana_hacks.py
+pytest tests/test_hack_db.py
 
 # 用 sqlite3 CLI 執行範例查詢
 sqlite3 solana_hacks/solana_hacks.db < solana_hacks/queries.sql
@@ -147,14 +146,18 @@ for row in conn.execute(
 - `categories`：攻擊類別（中英文名稱與說明）
 - `project_types`：專案類型
 - `recovery_statuses`：資金追回狀態
+- `chain_scopes`：事件範圍（`solana_only` / `multi_chain`）
 - `vuln_patterns`：邏輯漏洞模式（中英文名稱、說明與開發者防禦建議 `defense_zh`）
+- `dataset_info`：案例庫中繼資料
+
+攻擊類別、專案類型、追回狀態三張表與 Ethereum、BSC 案例庫共用，定義在 `hack_db/common_lookups.json`；Solana 的漏洞模式在 `hack_db/vuln_patterns/solana.json`。
 
 ### 檢視表
 
 | 檢視表 | 用途 |
 |---|---|
 | `v_incidents` | 事件明細，附上中文類別名稱、年份、淨損失 (`net_loss_usd`) 與來源數 |
-| `v_yearly_summary` | 年度事件數、總損失、總追回金額、單一最大損失 |
+| `v_yearly_summary` | 年度事件數、總損失、單鏈損失 (`single_chain_loss_usd`，不含多鏈事件)、總追回金額、單一最大損失 |
 | `v_category_summary` | 依攻擊類別統計 |
 | `v_project_type_summary` | 依專案類型統計 |
 | `v_vuln_pattern_summary` | 依邏輯漏洞模式統計，附事件清單與防禦建議 |
@@ -175,5 +178,5 @@ for row in conn.execute(
 ## 新增或修正事件
 
 1. 編輯 `data/incidents.json`，依日期排序新增一筆物件（欄位同上表，並附至少一個 `sources`）。
-2. 執行 `python solana_hacks/build_db.py`，建置時會自動驗證欄位、代碼與日期排序。
-3. 執行 `pytest tests/test_solana_hacks.py`。
+2. 執行 `python -m hack_db solana_hacks`，建置時會自動驗證欄位、代碼與日期排序。
+3. 執行 `pytest tests/test_hack_db.py`。
