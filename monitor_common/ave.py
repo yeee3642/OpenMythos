@@ -17,7 +17,6 @@ import urllib.parse
 from .http import HttpJsonClient
 
 BASE_URL = os.environ.get("AVE_DATA_URL", "https://data.ave-api.xyz/v2")
-CHAIN = "solana"
 
 
 class AveClient:
@@ -26,12 +25,14 @@ class AveClient:
         api_key: str | None = None,
         http: HttpJsonClient | None = None,
         base_url: str = BASE_URL,
+        chain: str = "solana",  # AVE chain name, e.g. solana, eth, bsc
     ):
         self.api_key = api_key or os.environ.get("AVE_API_KEY")
         if not self.api_key:
             raise ValueError("AVE_API_KEY is not set (get one at https://cloud.ave.ai)")
         self.http = http or HttpJsonClient(min_interval_s=1.0)
         self.base_url = base_url.rstrip("/")
+        self.chain = chain
 
     def _get(self, path: str, params: dict | None = None):
         url = self.base_url + path
@@ -40,15 +41,15 @@ class AveClient:
         return self.http.request(url, headers={"X-API-KEY": self.api_key})
 
     def token(self, address: str):
-        return self._get(f"/tokens/{address}-{CHAIN}")
+        return self._get(f"/tokens/{address}-{self.chain}")
 
     def holders(self, address: str, limit: int = 100):
-        return self._get(f"/tokens/holders/{address}-{CHAIN}", {"limit": limit})
+        return self._get(f"/tokens/holders/{address}-{self.chain}", {"limit": limit})
 
     def contract_risk(self, address: str):
         """AVE's contract risk / honeypot report for a token."""
-        return self._get(f"/contracts/{address}-{CHAIN}")
+        return self._get(f"/contracts/{address}-{self.chain}")
 
     def trending(self, page: int = 0, page_size: int = 50):
-        params = {"chain": CHAIN, "current_page": page, "page_size": page_size}
+        params = {"chain": self.chain, "current_page": page, "page_size": page_size}
         return self._get("/tokens/trending", params)

@@ -13,21 +13,13 @@ import asyncio
 import json
 import re
 from collections.abc import AsyncIterator, Iterable
-from dataclasses import dataclass
 
 from ..config import DEFAULT_WS_URL, DEX_PROGRAMS, DexProgram
+from ..models import NewPoolEvent
 
 _INVOKE = re.compile(r"^Program (\w+) invoke \[\d+\]$")
 _EXIT = re.compile(r"^Program (\w+) (?:success|failed.*)$")
 _LOG = "Program log: "
-
-
-@dataclass
-class NewPoolEvent:
-    dex: str
-    program_id: str
-    signature: str
-    slot: int
 
 
 def program_log_messages(logs: Iterable[str]) -> list[tuple[str, str]]:

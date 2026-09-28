@@ -6,6 +6,8 @@ from pathlib import Path
 
 import pytest
 
+from monitor_common.ave import AveClient
+from monitor_common.dexscreener import pair_to_snapshot
 from solana_monitor.case_library import DEFAULT_CASE_DB, CaseLibrary
 from solana_monitor.config import (
     DEX_PROGRAMS,
@@ -18,8 +20,6 @@ from solana_monitor.config import (
 from solana_monitor.filters import RULES, evaluate
 from solana_monitor.models import DROP, FLAG, KEEP, PoolSnapshot
 from solana_monitor.pipeline import Pipeline
-from solana_monitor.sources.ave import AveClient
-from solana_monitor.sources.dexscreener import pair_to_snapshot
 from solana_monitor.sources.pool_listener import (
     NewPoolEvent,
     event_from_notification,

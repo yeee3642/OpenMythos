@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from ..models import PoolSnapshot
 from .http import HttpJsonClient
+from .models import PoolSnapshot
 
 BASE_URL = "https://api.dexscreener.com"
 MAX_TOKENS_PER_CALL = 30

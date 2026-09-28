@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+from monitor_common.http import HttpJsonClient
+
 from ..config import DEFAULT_RPC_URL, POOL_AUTHORITIES, QUOTE_MINTS
 from ..models import MintInfo, PoolFacts
-from .http import HttpJsonClient
 
 
 class RpcError(RuntimeError):

@@ -14,13 +14,14 @@ import asyncio
 import json
 from pathlib import Path
 
+from monitor_common.ave import AveClient
+from monitor_common.dexscreener import DexScreenerClient
+
 from .case_library import DEFAULT_CASE_DB, CaseLibrary
 from .config import DEFAULT_RPC_URL, DEFAULT_WS_URL, DEX_PROGRAMS, FilterConfig
 from .filters import RULES
 from .models import DROP
 from .pipeline import Pipeline, Result
-from .sources.ave import AveClient
-from .sources.dexscreener import DexScreenerClient
 from .sources.solana_rpc import SolanaRpcClient
 from .store import DEFAULT_MARKET_DB, MarketStore
 

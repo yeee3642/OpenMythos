@@ -14,8 +14,9 @@ auditable. ``case_refs`` point to incident ids in solana_hacks/.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from datetime import date, datetime, timezone
+
+from monitor_common.rules import Rule, decide, make_hit, rule_table
 
 from .case_library import CaseLibrary
 from .config import (
@@ -25,217 +26,192 @@ from .config import (
     TOKEN_PROGRAM,
     FilterConfig,
 )
-from .models import DROP, FLAG, KEEP, Decision, MintInfo, PoolSnapshot, RuleHit
+from .models import DROP, FLAG, Decision, MintInfo, PoolSnapshot, RuleHit
 
-DROP_WEIGHT = 10
-
-
-@dataclass(frozen=True)
-class Rule:
-    rule_id: str
-    stage: str
-    action: str
-    title_zh: str
-    rationale_zh: str
-    case_refs: tuple[str, ...] = ()
-    weight: int = DROP_WEIGHT
-
-
-RULES = {
-    r.rule_id: r
-    for r in (
-        # --- stage 1: market data -------------------------------------------------
-        Rule(
-            "quote_not_allowed",
-            "market",
-            DROP,
-            "報價代幣不在白名單",
-            "只保留以 SOL / USDC / USDT 報價的池子；其他報價代幣流動性差、價格容易被操縱，也常被用來製造假流動性。",
+RULES = rule_table(
+    # --- stage 1: market data -------------------------------------------------
+    Rule(
+        "quote_not_allowed",
+        "market",
+        DROP,
+        "報價代幣不在白名單",
+        "只保留以 SOL / USDC / USDT 報價的池子；其他報價代幣流動性差、價格容易被操縱，也常被用來製造假流動性。",
+    ),
+    Rule(
+        "low_liquidity",
+        "market",
+        DROP,
+        "流動性過低",
+        "流動性太低的池子價格很容易被操縱。Mango、Solend USDH、Loopscale 都是先拉抬低流動性資產的價格，再以此借出真實資產。",
+        (
+            "mango-markets-2022",
+            "solend-usdh-oracle-manipulation-2022",
+            "loopscale-2025",
         ),
-        Rule(
-            "low_liquidity",
-            "market",
-            DROP,
-            "流動性過低",
-            "流動性太低的池子價格很容易被操縱。Mango、Solend USDH、Loopscale 都是先拉抬低流動性資產的價格，再以此借出真實資產。",
-            (
-                "mango-markets-2022",
-                "solend-usdh-oracle-manipulation-2022",
-                "loopscale-2025",
-            ),
-        ),
-        Rule(
-            "inactive_pool",
-            "market",
-            DROP,
-            "沒有交易活動",
-            "過去一小時完全沒有買賣，屬於死池或垃圾池，只是雜訊。",
-        ),
-        Rule(
-            "symbol_impersonation",
-            "market",
-            DROP,
-            "冒充知名代幣",
-            "代幣符號與知名代幣相同但 mint 地址不同。駭客挾持 Jupiter、Pump.fun 的 X 帳號後，就是推廣這類假冒代幣。",
-            ("jupiter-x-account-hijack-2025", "pumpfun-x-account-hijack-2025"),
-        ),
-        Rule(
-            "honeypot_suspect",
-            "market",
-            DROP,
-            "疑似貔貅盤（只能買不能賣）",
-            "一小時內大量買入卻完全沒有賣出，通常代表賣出被凍結權限、transfer hook 或黑名單擋下。",
-        ),
-        Rule(
-            "deprecated_program",
-            "market",
-            DROP,
-            "池子建立在已淘汰的程式上",
-            "已淘汰但沒有關閉的舊程式仍是攻擊面：2026 年 Raydium 舊版 AMM V3 池被偽造 LP mint 提走資產。",
-            ("raydium-legacy-amm-v3-2026",),
-        ),
-        Rule(
-            "fdv_liquidity_ratio",
-            "market",
-            FLAG,
-            "估值遠高於流動性",
-            "完全稀釋估值 (FDV) 是流動性的數十倍以上，少量賣壓就會讓價格崩跌。",
-            weight=2,
-        ),
-        # --- stage 0: pool-creation transaction (listener) ---------------------------
-        Rule(
-            "low_initial_liquidity",
-            "launch",
-            DROP,
-            "建池時注入的流動性過低",
-            "建池交易存入的 SOL / USDC / USDT 太少，多半是測試池、垃圾池或拉盤前的誘餌。",
-        ),
-        Rule(
-            "serial_creator",
-            "launch",
-            DROP,
-            "同一錢包短時間大量建池",
-            "同一個建池錢包 24 小時內開了多個池子，典型的批量發幣、割完就跑的模式。",
-        ),
-        # --- stage 2: on-chain mint checks ------------------------------------------
-        Rule(
-            "onchain_check_failed",
-            "onchain",
-            DROP,
-            "無法讀取鏈上 mint 資料",
-            "讀不到 mint 帳戶就無法確認權限與擴充功能，一律丟棄（寧可錯殺，不可放過）。",
-        ),
-        Rule(
-            "unknown_token_program",
-            "onchain",
-            DROP,
-            "非標準代幣程式",
-            "mint 不屬於 SPL Token 或 Token-2022 程式，行為無法預期。",
-        ),
-        Rule(
-            "mint_authority_active",
-            "onchain",
-            DROP,
-            "增發權限未放棄",
-            "mint authority 仍在，發行者可以隨時無限增發。Cashio 被無限鑄幣後，CASH 價格在數小時內歸零。",
-            ("cashio-2022",),
-        ),
-        Rule(
-            "freeze_authority_active",
-            "onchain",
-            DROP,
-            "凍結權限未放棄",
-            "freeze authority 可以凍結任何持有人的代幣帳戶，是 Solana 上常見的貔貅盤手法。",
-        ),
-        Rule(
-            "permanent_delegate",
-            "onchain",
-            DROP,
-            "Token-2022 永久委託",
-            "permanent delegate 可以不經同意轉走或銷毀任何人的代幣。",
-        ),
-        Rule(
-            "transfer_hook",
-            "onchain",
-            DROP,
-            "Token-2022 transfer hook",
-            "每次轉帳都會呼叫發行者指定的程式，可以用來阻擋賣出。",
-        ),
-        Rule(
-            "non_transferable",
-            "onchain",
-            DROP,
-            "Token-2022 不可轉讓",
-            "代幣無法轉讓，買了就賣不掉。",
-        ),
-        Rule(
-            "default_frozen",
-            "onchain",
-            DROP,
-            "Token-2022 新帳戶預設凍結",
-            "新建立的代幣帳戶預設為凍結狀態，需要發行者解凍才能轉出。",
-        ),
-        Rule(
-            "pausable",
-            "onchain",
-            DROP,
-            "Token-2022 可暫停",
-            "發行者可以暫停所有轉帳。",
-        ),
-        Rule(
-            "transfer_fee",
-            "onchain",
-            DROP,
-            "Token-2022 轉帳手續費過高",
-            "轉帳手續費超過上限；手續費權限者也能事後調高費率。低於上限時只標記為風險。",
-        ),
-        Rule(
-            "confidential_transfer",
-            "onchain",
-            FLAG,
-            "Token-2022 機密轉帳",
-            "ZK ElGamal 證明程式在 2025 年兩度被發現可偽造證明（可無限鑄造機密代幣），之後被停用。",
-            ("zk-elgamal-proof-bug-2025-04", "zk-elgamal-proof-bug-2025-06"),
-            weight=1,
-        ),
-        Rule(
-            "mint_close_authority",
-            "onchain",
-            FLAG,
-            "Token-2022 mint 可關閉",
-            "mint close authority 可以在供給歸零後關閉 mint，再用相同地址重建。",
-            weight=1,
-        ),
-        Rule(
-            "holder_concentration",
-            "onchain",
-            DROP,
-            "持幣過度集中",
-            "前 10 大持有人（已排除池子與銷毀地址）持有過高比例，隨時可以砸盤。低於丟棄門檻但超過標記門檻時只標記為風險。",
-        ),
-        # --- stage 3: case library --------------------------------------------------
-        Rule(
-            "protocol_recent_incident",
-            "knowledge",
-            FLAG,
-            "所在協議近期曾遭攻擊",
-            "池子所在的 DEX / 協議在案例庫中近期有造成損失的資安事件。",
-            weight=2,
-        ),
-    )
-}
+    ),
+    Rule(
+        "inactive_pool",
+        "market",
+        DROP,
+        "沒有交易活動",
+        "過去一小時完全沒有買賣，屬於死池或垃圾池，只是雜訊。",
+    ),
+    Rule(
+        "symbol_impersonation",
+        "market",
+        DROP,
+        "冒充知名代幣",
+        "代幣符號與知名代幣相同但 mint 地址不同。駭客挾持 Jupiter、Pump.fun 的 X 帳號後，就是推廣這類假冒代幣。",
+        ("jupiter-x-account-hijack-2025", "pumpfun-x-account-hijack-2025"),
+    ),
+    Rule(
+        "honeypot_suspect",
+        "market",
+        DROP,
+        "疑似貔貅盤（只能買不能賣）",
+        "一小時內大量買入卻完全沒有賣出，通常代表賣出被凍結權限、transfer hook 或黑名單擋下。",
+    ),
+    Rule(
+        "deprecated_program",
+        "market",
+        DROP,
+        "池子建立在已淘汰的程式上",
+        "已淘汰但沒有關閉的舊程式仍是攻擊面：2026 年 Raydium 舊版 AMM V3 池被偽造 LP mint 提走資產。",
+        ("raydium-legacy-amm-v3-2026",),
+    ),
+    Rule(
+        "fdv_liquidity_ratio",
+        "market",
+        FLAG,
+        "估值遠高於流動性",
+        "完全稀釋估值 (FDV) 是流動性的數十倍以上，少量賣壓就會讓價格崩跌。",
+        weight=2,
+    ),
+    # --- stage 0: pool-creation transaction (listener) ---------------------------
+    Rule(
+        "low_initial_liquidity",
+        "launch",
+        DROP,
+        "建池時注入的流動性過低",
+        "建池交易存入的 SOL / USDC / USDT 太少，多半是測試池、垃圾池或拉盤前的誘餌。",
+    ),
+    Rule(
+        "serial_creator",
+        "launch",
+        DROP,
+        "同一錢包短時間大量建池",
+        "同一個建池錢包 24 小時內開了多個池子，典型的批量發幣、割完就跑的模式。",
+    ),
+    # --- stage 2: on-chain mint checks ------------------------------------------
+    Rule(
+        "onchain_check_failed",
+        "onchain",
+        DROP,
+        "無法讀取鏈上 mint 資料",
+        "讀不到 mint 帳戶就無法確認權限與擴充功能，一律丟棄（寧可錯殺，不可放過）。",
+    ),
+    Rule(
+        "unknown_token_program",
+        "onchain",
+        DROP,
+        "非標準代幣程式",
+        "mint 不屬於 SPL Token 或 Token-2022 程式，行為無法預期。",
+    ),
+    Rule(
+        "mint_authority_active",
+        "onchain",
+        DROP,
+        "增發權限未放棄",
+        "mint authority 仍在，發行者可以隨時無限增發。Cashio 被無限鑄幣後，CASH 價格在數小時內歸零。",
+        ("cashio-2022",),
+    ),
+    Rule(
+        "freeze_authority_active",
+        "onchain",
+        DROP,
+        "凍結權限未放棄",
+        "freeze authority 可以凍結任何持有人的代幣帳戶，是 Solana 上常見的貔貅盤手法。",
+    ),
+    Rule(
+        "permanent_delegate",
+        "onchain",
+        DROP,
+        "Token-2022 永久委託",
+        "permanent delegate 可以不經同意轉走或銷毀任何人的代幣。",
+    ),
+    Rule(
+        "transfer_hook",
+        "onchain",
+        DROP,
+        "Token-2022 transfer hook",
+        "每次轉帳都會呼叫發行者指定的程式，可以用來阻擋賣出。",
+    ),
+    Rule(
+        "non_transferable",
+        "onchain",
+        DROP,
+        "Token-2022 不可轉讓",
+        "代幣無法轉讓，買了就賣不掉。",
+    ),
+    Rule(
+        "default_frozen",
+        "onchain",
+        DROP,
+        "Token-2022 新帳戶預設凍結",
+        "新建立的代幣帳戶預設為凍結狀態，需要發行者解凍才能轉出。",
+    ),
+    Rule(
+        "pausable",
+        "onchain",
+        DROP,
+        "Token-2022 可暫停",
+        "發行者可以暫停所有轉帳。",
+    ),
+    Rule(
+        "transfer_fee",
+        "onchain",
+        DROP,
+        "Token-2022 轉帳手續費過高",
+        "轉帳手續費超過上限；手續費權限者也能事後調高費率。低於上限時只標記為風險。",
+    ),
+    Rule(
+        "confidential_transfer",
+        "onchain",
+        FLAG,
+        "Token-2022 機密轉帳",
+        "ZK ElGamal 證明程式在 2025 年兩度被發現可偽造證明（可無限鑄造機密代幣），之後被停用。",
+        ("zk-elgamal-proof-bug-2025-04", "zk-elgamal-proof-bug-2025-06"),
+        weight=1,
+    ),
+    Rule(
+        "mint_close_authority",
+        "onchain",
+        FLAG,
+        "Token-2022 mint 可關閉",
+        "mint close authority 可以在供給歸零後關閉 mint，再用相同地址重建。",
+        weight=1,
+    ),
+    Rule(
+        "holder_concentration",
+        "onchain",
+        DROP,
+        "持幣過度集中",
+        "前 10 大持有人（已排除池子與銷毀地址）持有過高比例，隨時可以砸盤。低於丟棄門檻但超過標記門檻時只標記為風險。",
+    ),
+    # --- stage 3: case library --------------------------------------------------
+    Rule(
+        "protocol_recent_incident",
+        "knowledge",
+        FLAG,
+        "所在協議近期曾遭攻擊",
+        "池子所在的 DEX / 協議在案例庫中近期有造成損失的資安事件。",
+        weight=2,
+    ),
+)
 
 
 def _hit(rule_id: str, detail: str = "", action: str | None = None, refs=None):
-    rule = RULES[rule_id]
-    action = action or rule.action
-    return RuleHit(
-        rule_id=rule_id,
-        action=action,
-        reason_zh=f"{rule.title_zh}{'：' + detail if detail else ''}",
-        case_refs=tuple(refs) if refs is not None else rule.case_refs,
-        weight=DROP_WEIGHT if action == DROP else rule.weight,
-    )
+    return make_hit(RULES, rule_id, detail, action, refs)
 
 
 def market_rules(snap: PoolSnapshot, cfg: FilterConfig) -> list[RuleHit]:
@@ -375,5 +351,4 @@ def evaluate(
         hits += knowledge_rules(
             snap, cfg, cases, as_of or datetime.now(timezone.utc).date()
         )
-    verdict = DROP if any(h.action == DROP for h in hits) else KEEP
-    return Decision(verdict=verdict, risk_score=sum(h.weight for h in hits), hits=hits)
+    return decide(hits)
