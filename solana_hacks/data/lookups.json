@@ -29,6 +29,7 @@
     {"code": "frontend_account_compromise", "name_zh": "前端 / 社群帳號入侵", "name_en": "Frontend / Account Compromise", "description_zh": "官方網站、DNS 或社群媒體帳號遭入侵，用以推廣詐騙代幣或釣魚連結。"},
     {"code": "third_party_compromise", "name_zh": "第三方服務遭入侵", "name_en": "Third-Party Compromise", "description_zh": "合作的質押、託管、API 或其他外部供應商遭入侵，連帶造成損失。"},
     {"code": "protocol_vulnerability", "name_zh": "L1 協議層漏洞", "name_en": "Protocol-Level Vulnerability", "description_zh": "Solana 驗證節點、執行環境或原生程式的漏洞，多半在遭利用前即被修補。"},
+    {"code": "dos_attack", "name_zh": "阻斷服務攻擊", "name_en": "Denial-of-Service Attack", "description_zh": "以大量流量或請求癱瘓網站、錢包後端或網路，但沒有利用程式漏洞（若利用了 L1 缺乏流量控管等弱點而造成停擺，歸入 L1 協議層漏洞）。"},
     {"code": "operational_error", "name_zh": "操作失誤", "name_en": "Operational Error", "description_zh": "非惡意的部署或操作錯誤導致資金遺失或鎖死（非駭客攻擊，僅供參考）。"}
   ],
   "recovery_statuses": [
