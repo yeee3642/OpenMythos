@@ -8,20 +8,21 @@
 
 ## 資料概況（截至 2026-09-28）
 
-- **69 起事件**：時間範圍 2021-08-19 至 2026-09-17，共 202 筆參考來源。
-- **純 Solana 事件 55 起**，損失合計約 **10.28 億美元**。若加上 14 起多鏈事件（例如 FTX、Phemex、Nobitex 等中心化交易所遭駭，其中包含 Solana 資產），合計約 17.36 億美元。多鏈事件的金額包含其他鏈的資產，**不能直接當成 Solana 的損失**。
-- **資料可信度**：high 40 筆、medium 27 筆、low 2 筆。
+- **111 起事件**：時間範圍 2020-12-04 至 2026-09-24，共 289 筆參考來源。
+- **純 Solana 事件 93 起**，損失合計約 **10.28 億美元**。另有 18 起多鏈事件（例如 FTX、Phemex、CoinEx、Nobitex 等交易所遭駭，其中包含 Solana 資產），全部合計約 18.11 億美元。多鏈事件的金額包含其他鏈的資產，**不能直接當成 Solana 的損失**。
+- **資料可信度**：high 63 筆、medium 46 筆、low 2 筆。
 
 ### 年度統計
 
 | 年份 | 事件數 | 總損失（含多鏈） | 純 Solana 損失 | 從攻擊者追回 |
 |---|---:|---:|---:|---:|
-| 2021 | 7 | 197 萬美元 | 197 萬美元 | 0 |
-| 2022 | 13 | 9.93 億美元 | 5.16 億美元 | 2.14 億美元 |
-| 2023 | 7 | 682 萬美元 | 575 萬美元 | 0 |
-| 2024 | 9 | 2,457 萬美元 | 2,457 萬美元 | 0 |
-| 2025 | 19 | 3.47 億美元 | 1.26 億美元 | 928 萬美元 |
-| 2026（至 9 月） | 14 | 3.63 億美元 | 3.53 億美元 | 470 萬美元 |
+| 2020 | 1 | 0 | 0 | 0 |
+| 2021 | 10 | 197 萬美元 | 197 萬美元 | 0 |
+| 2022 | 23 | 9.93 億美元 | 5.16 億美元 | 2.14 億美元 |
+| 2023 | 12 | 6,082 萬美元 | 575 萬美元 | 0 |
+| 2024 | 15 | 3,827 萬美元 | 2,457 萬美元 | 0 |
+| 2025 | 27 | 3.47 億美元 | 1.26 億美元 | 928 萬美元 |
+| 2026（至 9 月） | 23 | 3.71 億美元 | 3.54 億美元 | 470 萬美元 |
 
 ### 純 Solana 事件損失前十名
 
@@ -41,32 +42,34 @@
 ### 觀察
 
 - **2025 年以後，大額損失的主因從合約漏洞轉向鏈下攻擊**：私鑰外洩、社交工程、第三方服務遭入侵（Drift、CoinDCX、SwissBorg、Upbit、Step Finance）。
-- **L1 協議層漏洞共 7 起**（rBPF、ELF 對齊、ZK ElGamal 兩次、gossip / 投票處理、QUIC、SIMD-0376），全部在遭利用前修補，沒有造成資金損失。
-- **至少 6 起事件被歸因或疑似歸因於北韓**，包括 Drift、Upbit、BitoPro、Phemex、Solareum。可用 `queries.sql` 第 6 個查詢列出。
-- 供應鏈攻擊（惡意 npm / crates / GitHub 套件）次數多，但公開的損失金額很少，實際損失可能被低估。
+- **L1 協議層漏洞共 21 起，沒有一起造成資金被盜**，但其中 8 起曾讓主網停擺或嚴重降速：2020 Turbine、2021 Grape IDO 洪水、2022 重複交易洪水、Candy Machine 洪水、durable nonce、分叉選擇錯誤、2023 Turbine 去重失效、2024 JIT 快取。2023 年以後，QUIC、依質押加權的 QoS 與優先費用上線，2025 年 12 月約 6 Tbps 的 DDoS 已經無法讓網路停擺。
+- **至少 7 起事件被歸因或疑似歸因於北韓**：CoinEx、Solareum、Phemex、BitoPro、CoinDCX、Upbit、Drift。可用 `queries.sql` 第 6 個查詢列出。
+- **供應鏈攻擊 13 起，2024 年以後明顯增加**：惡意 npm / PyPI / crates 套件、GitHub 假機器人與瀏覽器擴充功能專門竊取開發者與交易者的私鑰。公開的損失金額很少，實際損失可能被低估。
 
 ## 邏輯漏洞分析
 
-共 21 起事件的根因是程式邏輯缺陷，合計損失約 **4.01 億美元**：`smart_contract_bug` 14 起，`protocol_vulnerability` 7 起。每起事件都在 `vuln_pattern` 欄位標記漏洞模式，`vuln_patterns` 代碼表附有開發者防禦建議。
+共 45 起事件的根因是程式邏輯缺陷（`smart_contract_bug` 24 起，`protocol_vulnerability` 21 起），合計損失約 **4.02 億美元**。每起事件都在 `vuln_pattern` 欄位標記漏洞模式，`vuln_patterns` 代碼表附有開發者防禦建議。
 
 | 漏洞模式 | 事件數 | 損失 | 事件 |
 |---|---:|---:|---|
-| 帳戶驗證缺失 | 6 | 3.91 億美元 | Wormhole、Cashio、Crema、Texture、Raydium 舊版 AMM V3、Solend (2021) |
+| 帳戶驗證缺失 | 11 | 3.91 億美元 | Wormhole、Cashio、Crema、Texture、Raydium 舊版 AMM V3、Solend (2021)、Flash Trade；已揭露未遭利用：Raydium CLMM、SolSea / SPL Token、PDA 位址碰撞、Anchor 框架 |
 | 細節未公開 | 2 | 894 萬美元 | Cypher、NoOnes |
 | 競態條件 | 1 | 83 萬美元 | Aurory SyncSpace |
+| 數值計算錯誤（捨入 / 溢位） | 5 | 57 萬美元 | DefiTuna；已揭露：Raydium CP-Swap、SPL token-lending 捨入、rBPF 兩個 CVE |
 | 重複初始化 | 1 | 15.5 萬美元 | Metaplex Candy Machine v1 |
-| 鏈下系統邏輯缺陷 | 2 | 1.5 萬美元 | Magic Eden、io.net |
+| 鏈下系統邏輯缺陷 | 4 | 1.5 萬美元 | Magic Eden、io.net、Phantom「Demonic」、Solana Pay SDK |
+| 共識 / 狀態處理錯誤 | 5 | 0 | Turbine (2020)、Stake² (2021)、durable nonce 停擺 (2022)、分叉選擇 (2022)、JIT 快取 (2024) |
+| 輸入處理不當（節點崩潰 / 阻斷服務） | 5 | 0 | Agave ELF 對齊、gossip / 投票處理、Quinn QUIC、rBPF ELF 標頭溢位、web3.js 記憶體耗盡 |
+| 資源耗盡（交易洪水 / 缺乏流量控管） | 5 | 0 | Grape IDO、Candy Machine、重複交易洪水、Turbine 去重失效、big_mod_exp 計價錯誤 |
+| 控制流程錯誤 | 3 | 0 | Jet Protocol、marginfi 閃電貸、durable nonce 狀態錯誤 |
 | 密碼學驗證缺陷 | 3 | 0 | ZK ElGamal（2025 年 4 月、6 月）、SIMD-0376 |
-| 輸入處理不當（節點崩潰 / 阻斷服務） | 3 | 0 | Agave ELF 對齊、gossip / 投票處理、Quinn QUIC |
-| 數值計算錯誤（捨入 / 溢位） | 2 | 0 | SPL token-lending 捨入、rBPF 整數溢位 |
-| 控制流程錯誤 | 1 | 0 | Jet Protocol |
 
 ### 重點
 
-- **帳戶驗證缺失是 Solana 損失最大的邏輯漏洞**：這 6 起事件約佔邏輯漏洞總損失的 97.5%。Solana 程式用到的帳戶全部由呼叫者傳入，只要漏掉一個 owner、mint 或位址檢查，攻擊者就能用偽造帳戶冒充合法帳戶。Wormhole（偽造 Instructions sysvar）、Cashio（假抵押品帳戶鏈）、Crema（假 tick 帳戶）、Texture（未檢查代幣帳戶擁有者）都屬於這一類。
-- **同類錯誤反覆發生**：從 2021 年的 Solend 到 2026 年的 Raydium 舊版 AMM V3，帳戶驗證缺失橫跨五年一再出現。Raydium 案也顯示，已經淘汰但沒有關閉的舊程式仍然是攻擊面。
-- **L1 層的邏輯漏洞都在遭利用前修補**：密碼學驗證缺陷（ZK ElGamal、SIMD-0376）一旦被利用，可以無限鑄造機密代幣或偽造簽章，是潛在影響最大的一類，但全部由白帽研究者揭露。
-- **審計不等於安全**：Texture 經過審計，仍因缺少 owner 檢查而被攻擊；Cashio 則完全沒有審計。
+- **帳戶驗證缺失是 Solana 損失最大的邏輯漏洞**：11 起事件約佔邏輯漏洞總損失的 97%。Solana 程式用到的帳戶全部由呼叫者傳入，只要漏掉一個 owner、mint、PDA 種子或位址檢查，攻擊者就能用偽造帳戶冒充合法帳戶。Wormhole（偽造 Instructions sysvar）、Cashio（假抵押品帳戶鏈）、Crema（假 tick 帳戶）、Flash Trade（未檢查 PDA 種子）都屬於這一類，連 Anchor 框架本身在 2026 年也出現過這類漏洞。
+- **同類錯誤反覆發生**：從 2021 年的 Solend 到 2026 年的 Raydium 舊版 AMM V3 與 Flash Trade，帳戶驗證缺失橫跨五年一再出現。Raydium 案也顯示，已經淘汰但沒有關閉的舊程式仍然是攻擊面。
+- **L1 層的邏輯漏洞都在遭利用前修補，但停擺代價很高**：密碼學驗證缺陷（ZK ElGamal、SIMD-0376）一旦被利用，可以無限鑄造機密代幣或偽造簽章；共識與資源耗盡類錯誤則多次讓主網停擺數小時。
+- **審計不等於安全**：Texture、DefiTuna 都經過審計，仍被攻擊（DefiTuna 的漏洞程式碼是在審計結束後才修改的）；Cashio 則完全沒有審計。
 
 各模式的防禦建議可用 `queries.sql` 第 11 個查詢列出，第 12 個查詢列出全部邏輯漏洞事件的根因。
 
@@ -164,8 +167,8 @@ for row in conn.execute(
 
 ## 收錄原則
 
-- **收錄**：Solana 鏈上協議遭攻擊；Solana 錢包、交易機器人、SDK 遭入侵；中心化交易所或託管商的 **Solana 資產**被盜；Solana L1 核心漏洞（即使沒有造成損失）；有明確損失紀錄的 Solana 釣魚或供應鏈攻擊。
-- **不收錄**：純粹的迷因幣 rug pull 或內線拋售爭議、網路壅塞 / 停機等非資安事件、損失主要發生在其他鏈的事件。
+- **收錄**：Solana 鏈上協議遭攻擊；Solana 錢包、交易機器人、SDK、框架遭入侵或出現重大漏洞；中心化交易所、託管商或賭場的 **Solana 資產**被盜；Solana L1 核心漏洞，以及因協議錯誤或交易洪水造成的停擺（即使沒有資金損失）；針對 Solana 基礎設施的 DDoS；有明確紀錄的 Solana 釣魚、錢包盜取工具與供應鏈攻擊；重大漏洞的負責任揭露（損失為 0）。
+- **不收錄**：純粹的迷因幣 rug pull 或內線拋售爭議、沒有漏洞也沒有攻擊的單純容量 / 硬體停機、損失主要發生在其他鏈的事件、只是其他事件下游影響的項目。
 - `operational_error`（操作失誤）不屬於駭客攻擊，但因為有資金損失，所以一併收錄供參考，統計時可以自行排除。
 
 ## 資料來源與限制
@@ -174,6 +177,8 @@ for row in conn.execute(
 - 所有連結都取自搜尋結果，建置時沒有逐一重新連線確認；少數連結可能已失效或改址。
 - 2026 年的事件較新，部分只有二手報導（`confidence` 為 `medium` 或 `low`），金額與根因可能在官方事後報告發布後變動。
 - 已刻意排除：Audius 治理攻擊（發生在以太坊合約）、Banana Gun（被盜的是以太坊上的 ETH）、Trust Wallet 擴充功能事件（Solana 資產僅約 431 美元），以及疑似發生在 BNB Chain 的 SVT Token 事件。
+- UXD Protocol、Tulip Protocol 在 Mango 事件中被凍結的資金屬於下游影響，已包含在 `mango-markets-2022`，不另列事件，以免重複計算損失。
+- 所有事件都經過附來源的網路調查；另一輪「事實 / 範圍」兩個獨立角度的交叉驗證因搜尋額度用完而尚未完成。
 
 ## 新增或修正事件
 
