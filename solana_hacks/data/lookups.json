@@ -18,7 +18,7 @@
     {"code": "other", "name_zh": "其他", "name_en": "Other"}
   ],
   "categories": [
-    {"code": "smart_contract_bug", "name_zh": "智能合約漏洞", "name_en": "Smart Contract Bug", "description_zh": "鏈上程式 (program) 邏輯錯誤，例如缺少帳戶擁有者 / 簽名檢查、驗證繞過、數值計算錯誤。"},
+    {"code": "smart_contract_bug", "name_zh": "合約 / 程式邏輯漏洞", "name_en": "Smart Contract / Logic Bug", "description_zh": "鏈上程式 (program) 或平台程式的邏輯錯誤，例如缺少帳戶擁有者 / 簽名檢查、驗證繞過、數值捨入錯誤。"},
     {"code": "oracle_price_manipulation", "name_zh": "預言機 / 價格操縱", "name_en": "Oracle / Price Manipulation", "description_zh": "操縱低流動性市場或預言機價格，藉此超額借貸或提領。"},
     {"code": "economic_exploit", "name_zh": "經濟模型攻擊", "name_en": "Economic Exploit", "description_zh": "利用閃電貸、聯合曲線等經濟設計缺陷套利，程式碼本身可能照設計執行。"},
     {"code": "private_key_compromise", "name_zh": "私鑰外洩 / 盜用", "name_en": "Private Key Compromise", "description_zh": "管理員、熱錢包或使用者私鑰遭竊取或外洩。"},

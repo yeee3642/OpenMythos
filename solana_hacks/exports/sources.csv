@@ -1,0 +1,203 @@
+﻿incident_id,publisher,title,url
+agave-elf-alignment-bug-2024,Anza,Agave Network Patch: Root Cause Analysis,https://www.anza.xyz/blog/agave-network-patch-root-cause-analysis
+agave-elf-alignment-bug-2024,The Block,Solana developers address critical vulnerability with coordinated patch,https://www.theblock.co/post/310361/solana-developers-address-critical-vulnerability-with-coordinated-patch
+agave-elf-alignment-bug-2024,Cointelegraph,"Solana prevents potential outage, patches critical vulnerability",https://cointelegraph.com/news/solana-fixes-critical-security-vulnerability
+agave-gossip-vote-vulns-2026,Anza,January 2026: Gossip and Vote Processing Security Patch Summary,https://www.anza.xyz/blog/january-2026-gossip-and-vote-processing-security-patch-summary
+agave-gossip-vote-vulns-2026,CryptoSlate,"Terrifying Solana flaw just exposed how easily the ""always-on"" network could have been stalled by hackers",https://cryptoslate.com/terrifying-solana-flaw-just-exposed-how-easily-the-always-on-network-could-have-been-stalled-by-hackers/
+agave-gossip-vote-vulns-2026,CoinCentral,Solana Urgent Patch Reveals How Easily Hackers Could Have Stalled Network,https://coincentral.com/solana-urgent-patch-reveals-how-easily-hackers-could-have-stalled-network/
+allbridge-core-2026,The Block,Allbridge Core pauses protocol after $1.65 million flash loan exploit: onchain analysts,https://www.theblock.co/post/408855/allbridge-core-exploit
+allbridge-core-2026,BeInCrypto,Allbridge Core Pauses Protocol After Attacker Drains More Than $1 Million,https://beincrypto.com/allbridge-core-solana-exploit-paused/
+allbridge-core-2026,Tech Times,Allbridge Core Loses $1.65M to Flash Loan Again After Its Single-Pool Fix Missed Solana,https://www.techtimes.com/articles/321044/20260720/allbridge-core-loses-165m-flash-loan-again-after-its-single-pool-fix-missed-solana.htm
+aquifer-2026,crypto.news,"Solana AMM Aquifer hit by $2.5 million exploit, offers 20% bounty",https://crypto.news/solana-amm-aquifer-hit-by-2-5-million-exploit-offers-20-bounty/
+aquifer-2026,Shattered,Aquifer Exploit Drains $2.5M as August Hacks Hit 50,https://shattered.io/aquifer-solana-exploit-white-hat-bounty-2026/
+aquifer-2026,Phemex News,Aquifer Loses $2.5M in Solana Wallet Compromise,https://phemex.com/news/article/solana-amm-aquifer-suffers-25-million-exploit-after-wallet-compromise-95161
+aurory-nft-drop-phishing-2021,Stockhead,'Completely wrecked': Phishing attack during Aurory Project NFT drop steals millions; others get 500x gains,https://stockhead.com.au/cryptocurrency/completely-wrecked-phishing-attack-during-aurory-project-nft-drop-steals-millions-others-get-500x-gains/
+aurory-nft-drop-phishing-2021,TRM Labs,Hurts the SOL: Security Considerations for NFT Drops,https://www.trmlabs.com/post/hurts-the-sol-security-considerations-for-nft-drops
+aurory-nft-drop-phishing-2021,Coinfomania,Phishing Website for NFT Drop on Solana Sweeps Over $500k Tokens,https://coinfomania.com/phishing-aurory-nft-drop-solana-sweeps-sol-tokens/
+aurory-syncspace-2023,Helius,"Solana Hacks, Bugs, and Exploits: A Complete History",https://www.helius.dev/blog/solana-hacks
+aurory-syncspace-2023,Crypto Daily,"Solana-Based Aurory Suffers Devastating Hack, Loses 80% Liquidity",https://cryptodaily.co.uk/2023/12/solana-based-aurory-suffers-devastating-hack-loses-80-liquidity
+aurory-syncspace-2023,Binance Square (Binance News),"Aurory Gaming Platform Suffers Exploit Resulting in Loss of $830,000 Worth of AURY Tokens",https://www.binance.com/en-IN/feed/post/2023-12-18-aurory-gaming-platform-suffers-exploit-resulting-in-loss-of-830-000-worth-of-aury-tokens-1560581579050
+bigone-2025,Brave New Coin,BigONE Exchange Loses $27 Million in Supply Chain Cyberattack,https://bravenewcoin.com/insights/bigone-exchange-loses-27-million-in-supply-chain-cyberattack
+bigone-2025,Guardrail,Real-time lessons from BigONE Exchange $27M supply chain attack,https://www.guardrail.ai/blog/real-time-lessons-from-bigone-exchange-27m-supply-chain-attack
+bigone-2025,Halborn,Explained: The BigONE Hack (July 2025),https://www.halborn.com/blog/post/explained-the-big-one-hack-july-2025
+bitopro-2025,CoinDesk,"Taiwanese Crypto Exchange BitoPro Likely Hacked for $11M in May, ZachXBT Says",https://www.coindesk.com/tech/2025/06/02/taiwanese-crypto-exchange-bitopro-likely-hacked-for-usd11m-in-may-zachxbt-says
+bitopro-2025,BleepingComputer,BitoPro exchange links Lazarus hackers to $11 million crypto heist,https://www.bleepingcomputer.com/news/security/bitopro-exchange-links-lazarus-hackers-to-11-million-crypto-heist/
+bitopro-2025,The Block,"ZachXBT flags suspicious $11.5M outflows from BitoPro exchange's hot wallets, says it was 'likely exploited'",https://www.theblock.co/news/regulation/2025-06-02-zachxbt-flags-suspicious-11-5m-outflows-from-bitopro-exchanges-hot-wallets-says-it-was-likely-exploited-356522
+bonkdao-2026,CoinDesk,BONK faces $20 million treasury drain after attacker spends $4 million to pass malicious proposal,https://www.coindesk.com/markets/2026/07/07/bonk-faces-usd20-million-treasury-drain-after-attacker-spends-usd4-million-to-pass-malicious-proposal
+bonkdao-2026,Bitcoin.com News,"BonkDAO Treasury Loses $20M in Malicious Governance Attack, BONK Slides 8%",https://news.bitcoin.com/bonkdao-treasury-loses-20m-in-malicious-governance-attack-bonk-slides-8/
+bonkdao-2026,crypto.news,What is a governance attack? How BonkDAO lost $20M in a single vote,https://crypto.news/what-is-a-governance-attack-how-bonkdao-lost-20m-in-a-single-vote/
+cashio-2022,CertiK,Cashio App Incident Analysis,https://www.certik.com/resources/blog/cashio-app-incident-analysis
+cashio-2022,The Block,Stablecoin Cashio on Solana exploited for $52.8 million in 'infinite mint glitch',https://www.theblock.co/post/138934/stablecoin-cashio-on-solana-exploited-for-28-million-in-infinite-mint-glitch
+cashio-2022,The Defiant,Cashio Hacker Asks Victims To 'Apply' For Refunds After $52M Heist,https://thedefiant.io/news/hacks/cashio-exploit-refund
+clinksink-drainer-2024,Mandiant / Google Cloud,Solana Cryptocurrency Stolen in CLINKSINK Drainer Campaigns,https://cloud.google.com/blog/topics/threat-intelligence/solana-cryptocurrency-stolen-clinksink-drainer-campaigns
+clinksink-drainer-2024,BleepingComputer,Mandiant's X account hacked by crypto Drainer-as-a-Service gang,https://www.bleepingcomputer.com/news/security/mandiants-x-account-hacked-by-crypto-drainer-as-a-service-gang/
+clinksink-drainer-2024,SecurityWeek,Mandiant Details How Its X Account Was Hacked,https://www.securityweek.com/mandiant-details-crypto-theft-campaign-that-hacked-its-x-account-via-brute-force-attack/
+coindcx-2025,CoinDesk,Indian Crypto Exchange CoinDCX Suffers $44M Hack,https://www.coindesk.com/web3/2025/07/19/indian-crypto-exchange-coindcx-suffers-44m-hack
+coindcx-2025,TechCrunch,Indian crypto exchange CoinDCX confirms $44 million stolen during hack,https://techcrunch.com/2025/07/21/indian-crypto-exchange-coindcx-confirms-44-million-stolen-during-hack
+coindcx-2025,The Block,"Hackers used fake job offer to target CoinDCX employee, steal $44 million",https://www.theblock.co/post/364993/coindcx-employee-arrested-police-crypto-theft
+coindcx-2025,Bitcoin.com News,Indian Exchange Suffers $44M Hack—Solana Hot Wallet Compromised in Sophisticated Attack,https://news.bitcoin.com/indian-exchange-suffers-44m-hack-solana-hot-wallet-compromised-in-sophisticated-attack/
+crema-finance-2022,CoinDesk,"Crema Finance Attacker Returns Almost $8M, Keeps $1.7M Bounty",https://www.coindesk.com/tech/2022/07/07/crema-finance-attacker-returns-almost-8m-keeps-17m-bounty
+crema-finance-2022,Halborn,Explained: The Crema Finance Hack (July 2022),https://www.halborn.com/blog/post/explained-the-crema-finance-hack-july-2022
+crema-finance-2022,U.S. DOJ (SDNY),Former Security Engineer Sentenced To Three Years In Prison For Hacking Two Decentralized Cryptocurrency Exchanges,https://www.justice.gov/usao-sdny/pr/former-security-engineer-sentenced-three-years-prison-hacking-two-decentralized
+cypher-insider-hoak-2023,The Block,Cypher Protocol contributor admits to taking and gambling funds recovered from exploit,https://www.theblock.co/post/294459/cypher-protocol-contributor-admits-to-taking-and-gambling-funds-recovered-from-exploit
+cypher-insider-hoak-2023,Unchained,Cypher Protocol Insider Steals From Exploit Redemption Contract,https://unchainedcrypto.com/cypher-protocol-insider-steals-from-exploit-redemption-contract/
+cypher-insider-hoak-2023,DL News,"Insider at Solana protocol Cypher admits to taking $300,000: 'It's time to face the music'",https://www.dlnews.com/articles/defi/cypher-developer-says-he-gambled-away-hack-victim-funds/
+cypher-protocol-2023,CoinDesk,"Solana-Based Cypher Protocol Experiences Exploit, Freezes Smart Contract",https://www.coindesk.com/business/2023/08/07/solana-based-cypher-protocol-experiences-exploit-freezes-smart-contract
+cypher-protocol-2023,Cointelegraph,Cypher Protocol freezes smart contract after an estimated $1M exploit,https://cointelegraph.com/news/cypher-protocol-solana-hack-exploited-smart-contract
+cypher-protocol-2023,Unchained,Solana-Based Cypher Protocol Loses $1 Million in Exploit,https://unchainedcrypto.com/solana-based-cypher-protocol-loses-1-million-in-exploit/
+dexx-2024,Cointelegraph,Over 8.6K Solana wallets linked to $21M DEXX hacker,https://cointelegraph.com/news/solana-dexx-hack-november-2024-suspicious-wallets
+dexx-2024,Web3 is Going Just Great,Around $21 million in losses reported by users of DEXX,https://www.web3isgoinggreat.com/?id=dexx-losses
+dexx-2024,Brave New Coin,"Dexx Hack Investigation Unveils Over 8,600 Solana Wallet Links: SlowMist Report",https://bravenewcoin.com/insights/dexx-hack-investigation-unveils-over-8600-solana-wallet-links-slowmist-report
+drift-2026,TRM Labs,North Korean Hackers Attack Drift Protocol In USD 285 Million Heist,https://www.trmlabs.com/resources/blog/north-korean-hackers-attack-drift-protocol-in-285-million-heist
+drift-2026,Chainalysis,Drift Protocol Hack: How Privileged Access Led to a $285M Loss,https://www.chainalysis.com/blog/lessons-from-the-drift-hack/
+drift-2026,CoinDesk,Here is how Drift attackers drained more than $270 million using a Solana feature designed for convenience,https://www.coindesk.com/tech/2026/04/02/how-a-solana-feature-designed-for-convenience-let-an-attacker-drain-usd270-million-from-drift
+fractal-discord-phishing-2021,TechCrunch,Justin Kan's NFT platform suffers rocky debut as scammer makes off with $150K in user funds,https://techcrunch.com/2021/12/21/justin-kans-nft-platform-suffers-rocky-debut-as-scammer-makes-off-with-150k-in-user-funds/
+fractal-discord-phishing-2021,GameSpot,NFT Gaming Project Hack Sees $150K Of Crypto Stolen,https://www.gamespot.com/articles/nft-gaming-project-hack-sees-150k-of-crypto-stolen/1100-6499194/
+fractal-discord-phishing-2021,Cotten.IO (Medium),The $150k Discord Crypto Hack,https://medium.com/cotten-io/the-150k-discord-crypto-hack-b3dde6698072
+ftx-hack-2022,Elliptic,The $477 million FTX hack: a new blockchain trail,https://www.elliptic.co/blog/the-477-million-ftx-hack-following-the-blockchain-trail
+ftx-hack-2022,CNBC,Three people indicted in $400 million FTX crypto hack conspiracy,https://www.cnbc.com/2024/02/02/three-people-indicted-in-400-million-ftx-hack-conspiracy.html
+ftx-hack-2022,CoinDesk,FTX Hack Sparks Revolution at Serum DEX as Solana Devs Plot Alameda's Ouster,https://www.coindesk.com/business/2022/11/12/ftx-hack-spooks-solana-defi-community-igniting-revolution-at-alameda-controlled-serum-dex
+garden-finance-2025,Garden Finance,"Garden Incident Report — October 30, 2025",https://garden.finance/blog/garden-incident-report-october-30-2025
+garden-finance-2025,Crypto Briefing,Crypto bridge Garden Finance suffers $11M hack via compromised solver,https://cryptobriefing.com/garden-finance-bridge-11m-hack/
+garden-finance-2025,Cryptopolitan,Garden Finance exploited for $5.5M on multiple chains,https://www.cryptopolitan.com/garden-finance-exploit-multiple-chains/
+io-net-2024,The Block,Solana-based DePIN io.net CEO claims network was attacked in detailed postmortem,https://www.theblock.co/post/291315/solana-based-depin-io-net-ceo-claims-network-was-attacked-in-detailed-postmortem
+io-net-2024,Cointelegraph,Io.net responds to GPU metadata attack,https://cointelegraph.com/news/io-net-responds-to-gpu-metadata-attack
+io-net-2024,io.net (Medium),25th April Incident Report,https://ionet.medium.com/25th-april-incident-report-176e5fb5c576
+jet-protocol-collateral-bug-2022,Sec3,On a $20M Bug in Jet Protocol,https://sec3.dev/blog/on-a-20m-bug-in-jet-protocol
+jet-protocol-collateral-bug-2022,Jayne (Medium),How to freely borrow all the TVL from the Jet Protocol,https://medium.com/@0xjayne/-how-to-freely-borrow-all-the-tvl-from-the-jet-protocol-25d40e35920e
+jet-protocol-collateral-bug-2022,HackMD,Jet Protocol - $25 million vulnerability,https://hackmd.io/wMcjwC3dR6K2or_RArLP-w
+jupiter-x-account-hijack-2025,The Block,"Solana DEX aggregator Jupiter's X account hacked, promotes fake memecoin",https://www.theblock.co/post/339128/solana-dex-aggregator-jupiters-x-account-hacked-promotes-fake-memecoin
+jupiter-x-account-hijack-2025,crypto.news,Jupiter recovers official X account after scammers promote MEOW,https://crypto.news/jupiter-recovers-official-x-account-after-scammers-promote-meow/
+jupiter-x-account-hijack-2025,CryptoPotato,Jupiter Exchange Regains X Account Following Hack,https://cryptopotato.com/jupiter-exchange-regains-x-account-following-hack/
+loopscale-2025,The Block,Solana DeFi protocol Loopscale hit with $5.8 million exploit two weeks after launch,https://www.theblock.co/post/352083/solana-defi-protocol-loopscale-hit-with-5-8-million-exploit-two-weeks-after-launch
+loopscale-2025,Halborn,Explained: The Loopscale Hack (April 2025),https://www.halborn.com/blog/post/explained-the-loopscale-hack-april-2025
+loopscale-2025,CoinMarketCap Academy,"Loopscale Loses $5.8 Million in Exploit Two Weeks After Launch, Halts Key Operations",https://coinmarketcap.com/academy/article/loopscale-loses-dollar58-million-in-exploit-two-weeks-after-launch-halts-key-operations
+magic-eden-fake-nft-listings-2023,CoinDesk,"Magic Eden Issue Leads to Fake NFT Listings, Will Refund Affected Users",https://www.coindesk.com/web3/2023/01/04/magic-eden-issue-leads-to-fake-nft-listings
+magic-eden-fake-nft-listings-2023,Cointelegraph,Magic Eden to refund users after fake NFTs sold due to exploit,https://cointelegraph.com/news/magic-eden-to-refund-users-after-25-fake-nfts-sold-due-to-exploit
+magic-eden-fake-nft-listings-2023,Decrypt,Fake Solana NFTs Are Being Sold on Magic Eden in 'Massive' Exploit,https://decrypt.co/118412/fake-solana-nfts-magic-eden-massive-exploit
+mango-markets-2022,U.S. SEC,SEC Charges Avraham Eisenberg with Manipulating Mango Markets' 'Governance Token' to Steal $116 Million of Crypto Assets,https://www.sec.gov/newsroom/press-releases/2023-13
+mango-markets-2022,CoinDesk,Judge Overturns Convictions in Mango Markets Exploiter's Crypto Fraud Case,https://www.coindesk.com/business/2025/05/24/judge-overturns-convictions-in-mango-markets-exploiters-crypto-fraud-case
+mango-markets-2022,DL News,Prosecutors appeal acquittal of Mango Markets exploiter Avraham Eisenberg,https://www.dlnews.com/articles/defi/prosecutors-appeal-acquittal-of-mango-markets-exploiter/
+metaplex-candy-machine-v1-2022,JonLuca's Blog,"Web3, Free Candy, and exploits galore",https://jonlu.ca/posts/candy-machine
+metaplex-candy-machine-v1-2022,JonLuca (Substack),"Web3, Free Candy, and exploits galore",https://jonluca.substack.com/p/candy-machine
+meteora-otc-scam-2026,crypto.news,Meteora reports $1.5 million OTC scam loss in Q1 MET report,https://crypto.news/meteora-reports-1-5-million-otc-scam-loss-in-q1-met-report/
+meteora-otc-scam-2026,Pine Analytics,Meteora Q1 2026 Quarterly Report,https://pineanalytics.substack.com/p/meteora-q1-2026-quarterly-report
+monkey-kingdom-discord-phishing-2021,South China Morning Post,"Hot Hong Kong NFT project Monkey Kingdom loses US$1.3 million in hack, exposing security concerns",https://www.scmp.com/tech/tech-trends/article/3160707/hot-hong-kong-nft-project-monkey-kingdom-loses-us13-million-hack
+monkey-kingdom-discord-phishing-2021,Grape Protocol (X/Twitter),We've just discovered that one of our setup admins got hacked 7 days ago ... affected the @fractalwagmi and @monkeykingdom_,https://twitter.com/grapeprotocol/status/1473422238250680320
+monkey-kingdom-discord-phishing-2021,NFT News UK,Monkey Kingdom Refunds $1.2 Million to Discord Phishing Scam Victims,http://nftnewsuk.com/monkey-kingdom-refunds-1-2-million-to-discord-phishing-scam-victims
+nirvana-finance-2022,The Block,Solana stablecoin Nirvana sinks 90% amid $3.5 million flash loan exploit,https://www.theblock.co/post/159975/solana-stablecoin-nirvana-sinks-90-amid-3-5-million-flash-loan-exploit
+nirvana-finance-2022,U.S. DOJ (SDNY),Former Security Engineer For International Technology Company Pleads Guilty To Hacking Two Decentralized Cryptocurrency Exchanges,https://www.justice.gov/usao-sdny/pr/former-security-engineer-international-technology-company-pleads-guilty-hacking-two
+nirvana-finance-2022,Blockworks,Nirvana hacker sentenced to 3 years after pleading guilty,https://blockworks.com/news/nirvana-finance-hacker-sentenced
+nobitex-2025,CNBC,"Pro-Israel hackers destroy $90 million in Iran crypto exchange breach, analytics firm says",https://www.cnbc.com/2025/06/18/pro-israel-hackers-iran-crypto.html
+nobitex-2025,SlowMist,Nearly $100 Million Burned: Iran's Largest Crypto Exchange Nobitex Suffers Major Hack,https://slowmist.medium.com/nearly-100-million-burned-irans-largest-crypto-exchange-nobitex-suffers-major-hack-eafd57b2eac7
+nobitex-2025,TRM Labs,Inside the Nobitex Breach: What the Leaked Source Code Reveals About Iran's Crypto Infrastructure,https://www.trmlabs.com/resources/blog/inside-the-nobitex-breach-what-the-leaked-source-code-reveals-about-irans-crypto-infrastructure
+noones-2025,The Block,"NoOnes CEO Ray Youssef discloses $8 million exploit weeks after the fact, confirming crypto sleuth ZachXBT's investigation",https://www.theblock.co/news/markets/2025-01-24-noones-ceo-ray-youssef-8-million-exploit-crypto-sleuth-zachxbt-investigation-337004
+noones-2025,Merkle Science,Hack Track: NoOnes Flow of Funds Analysis,https://www.merklescience.com/blog/hack-track-noones-flow-of-funds-analysis
+noones-2025,ChainCatcher,"NoOnes CEO confirmed that it was previously attacked by hackers, stating that the reason was a vulnerability in its Solana cross-chain bridge",https://www.chaincatcher.com/en/article/2164737
+npm-gmail-smtp-key-stealers-2025,Socket,Gmail For Exfiltration: Malicious npm Packages Target Solana Private Keys and Drain Victim's Wallets,https://socket.dev/blog/gmail-for-exfiltration-malicious-npm-packages-target-solana-private-keys-and-drain-victim-s
+npm-gmail-smtp-key-stealers-2025,The Hacker News,Hackers Deploy Malicious npm Packages to Steal Solana Wallet Keys via Gmail SMTP,https://thehackernews.com/2025/01/hackers-deploy-malicious-npm-packages.html
+npm-typosquat-raydium-bs58-2026,Cyber Security News,"Five Malicious npm Packages Target Crypto Developers, Exfiltrate Wallet Keys via Telegram",https://cybersecuritynews.com/five-malicious-npm-packages/
+npm-typosquat-raydium-bs58-2026,DEV Community,Supply Chain Key Theft in npm: How 5 Typosquatted Packages Silently Drain Solana and Ethereum Wallets,https://dev.to/ohmygod/supply-chain-key-theft-in-npm-how-5-typosquatted-packages-silently-drain-solana-and-ethereum-3pk1
+optifi-2022,CoinDesk,Solana-Based DeFi Protocol OptiFi Loses $661K in Programming Blunder,https://www.coindesk.com/business/2022/08/30/solana-based-defi-protocol-optifi-loses-661k-in-programming-blunder
+optifi-2022,Decrypt,"Solana DeFi Exchange Accidentally Bricks Itself, Locks Up $661K Forever",https://decrypt.co/108585/solana-defi-exchange-optifi-bricks-itself-loses-661k
+optifi-2022,The Register,"DeFi OptiFi locks up $661,000 of assets in code snafu",https://www.theregister.com/offbeat/2022/09/02/defi-optifi-locks-up-661000-of-assets-in-code-snafu/513633
+parcl-dns-hijack-2024,Helius,"Solana Hacks, Bugs, and Exploits: A Complete History",https://www.helius.dev/blog/solana-hacks
+phemex-2025,Halborn,Explained: The Phemex Hack (January 2025),https://www.halborn.com/blog/post/explained-the-phemex-hack-january-2025
+phemex-2025,crypto.news,Hackers steal $70m from Phemex in 2025's largest attack so far,https://crypto.news/hackers-steal-70m-from-phemex-in-2025s-largest-attack-so-far/
+phemex-2025,BleepingComputer,Hackers steal $85 million worth of cryptocurrency from Phemex,https://www.bleepingcomputer.com/news/security/hackers-steal-85-million-worth-of-cryptocurrency-from-phemex/
+phemex-2025,Phemex,Phemex Hot Wallet Security Incident Update and Timeline,https://phemex.com/announcements/phemex-hot-wallet-security-incident-update-and-timeline
+pump-fun-2024,The Block,Solana token launcher Pump.fun suffers flash loan exploit,https://www.theblock.co/amp/post/294959/solana-token-launcher-pump-fun-suffers-flash-loan-exploit
+pump-fun-2024,Blockworks,Pump dot Fun exploiter identified and arrested in London,https://blockworks.co/news/pump-dot-fun-exploiter-arrest-london
+pump-fun-2024,Decrypt,Former Pump.fun Dev Sentenced to Six Years in Prison for $2 Million Solana Fraud,https://decrypt.co/352876/former-pump-fun-dev-sentenced-six-years-prison-2-million-solana-fraud
+pumpfun-x-account-hijack-2025,Decrypt,Pump.fun X Account Hacked to Promote Fraudulent PUMP Solana Meme Coin,https://decrypt.co/307857/pump-fun-x-account-hacked-solana-meme-coin
+pumpfun-x-account-hijack-2025,The Block,Pump.fun's X account hacked to promote fraudulent tokens,https://www.theblock.co/post/343515/pump-funs-x-account-hacked-to-promote-fraudulent-tokens
+pumpfun-x-account-hijack-2025,BleepingComputer,Pump.fun X account hacked to promote scam governance token,https://www.bleepingcomputer.com/news/security/pumpfun-x-account-hacked-to-promote-scam-governance-token/
+pyth-btc-price-glitch-2021,Fortune,"Whoops! Bitcoin briefly crashes to $5,402 on network glitch",https://fortune.com/2021/09/22/bitcoin-briefly-crashes-5402-pyth-network-glitch/
+pyth-btc-price-glitch-2021,The Defiant,Oracle Pyth Goes Haywire on Solana with Bad Prices,https://thedefiant.io/news/defi/pyth-solana-bad-pricing-meltdown
+pyth-btc-price-glitch-2021,Pyth Network (Medium),Pythiad 3: Pyth laboured in September,https://pythnetwork.medium.com/pythiad-3-pyth-laboured-in-september-d9e833383235
+quinn-quic-dos-2026,RustSec Advisory Database,RUSTSEC-2026-0037: quinn-proto: Denial of service in Quinn endpoints,https://rustsec.org/advisories/RUSTSEC-2026-0037.html
+quinn-quic-dos-2026,Chainflow (Substack),"Solana Foundation Validator Discussion Recap, March 12, 2026",https://chainflowsol.substack.com/p/solana-foundation-validator-discussion-173
+rainbow-node-drainers-2023,BeInCrypto,How Hackers Drained $4.17 Million from Solana Wallet,https://beincrypto.com/solana-wallet-drainers/
+rainbow-node-drainers-2023,Coinpaper,Solana wallet drainers becoming a serious threat in crypto space,https://coinpaper.com/3043/solana-army-won-t-help-rainbow-and-node-drainers-on-the-rampage
+raydium-2022,The Block,Solana-based exchange Raydium suffers $4.4 million exploit,https://www.theblock.co/amp/post/195712/solana-based-exchange-raydium-suffers-2-million-exploit
+raydium-2022,Raydium (Medium),Compensation Plan and Next Steps,https://raydium.medium.com/compensation-plan-and-next-steps-367246a62277
+raydium-2022,The Block,Raydium hacker funnels $2.7 million through Tornado Cash mixer,https://www.theblock.co/post/203732/raydium-hacker-funnels-2-7-million-through-tornado-cash-mixer
+raydium-legacy-amm-v3-2026,CCN,Fake Token Exploit Bleeds Raydium DEX of $1.3 Million in Legacy Pools,https://www.ccn.com/news/crypto/raydium-exploit-legacy-pools-solana/
+raydium-legacy-amm-v3-2026,Protos,Raydium's old liquidity pools exploited for $1.3 million,https://protos.com/raydiums-old-liquidity-pools-exploited-for-1-3-million/
+raydium-legacy-amm-v3-2026,Cryptonews,Raydium Suffers $1.34M Exploit via Fake LP Tokens: Here's Why,https://cryptonews.com/news/raydium-exploit-fake-lp-tokens-deprecated-solana-pools/
+rust-crates-faster-log-2025,Socket,Two Malicious Rust Crates Impersonate Popular Logger to Steal Wallet Keys,https://socket.dev/blog/two-malicious-rust-crates-impersonate-popular-logger-to-steal-wallet-keys
+rust-crates-faster-log-2025,Rust Blog,crates.io: Malicious crates faster_log and async_println,https://blog.rust-lang.org/2025/09/24/crates.io-malicious-crates-fasterlog-and-asyncprintln
+rust-crates-faster-log-2025,The Hacker News,"Malicious Rust Crates Steal Solana and Ethereum Keys — 8,424 Downloads Confirmed",https://thehackernews.com/2025/09/malicious-rust-crates-steal-solana-and.html
+saga-dao-2024,CoinDesk,Fan Club for Solana's Saga Phone Loses 750 SOL,https://www.coindesk.com/business/2024/01/24/fan-club-for-solanas-saga-phone-loses-750-sol-to-hack
+saga-dao-2024,crypto.news,Community-run Solana mobile DAO puzzled over $60k hack,https://crypto.news/community-run-solana-mobile-dao-puzzled-over-60k-hack/
+serum-ftx-upgrade-authority-2022,CoinDesk,FTX Hack Sparks Revolution at Serum DEX as Solana Devs Plot Alameda's Ouster,https://www.coindesk.com/business/2022/11/12/ftx-hack-spooks-solana-defi-community-igniting-revolution-at-alameda-controlled-serum-dex
+serum-ftx-upgrade-authority-2022,Cointelegraph,Liquidity hub Serum forked by developers after FTX hack,https://cointelegraph.com/news/liquidity-hub-serum-forked-by-developers-after-ftx-hack
+serum-ftx-upgrade-authority-2022,Unchained,Serum Fork in the Works Amid Fears That FTX-Owned Upgrade Keys Are Compromised,https://unchainedcrypto.com/serum-fork-in-the-works-amid-fears-that-ftx-owned-upgrade-keys-are-compromised/
+simd-0376-zero-key-flaw-2026,Solana Compass,hackhack.ai Finds SIMD-0376 Zero-Key Signing Flaw in Solana Ed25519 Change,https://solanacompass.com/news/ai-research-agent-flags-zero-key-signing-risk-in-simd-0376-before-mainnet-activation
+simd-0376-zero-key-flaw-2026,Crypto Briefing,Hackhackai identifies critical flaw in Solana's SIMD-0376 proposal,https://cryptobriefing.com/hackhackai-solana-simd-0376-zero-address-flaw/
+simd-0376-zero-key-flaw-2026,GitHub solana-foundation/solana-improvement-documents,Amend simd 0376 ed25519-zebra verification (PR #616),https://github.com/solana-foundation/solana-improvement-documents/pull/616
+slope-wallet-2022,Solana Foundation,8/2/2022 Slope Wallet Incident Update,https://solana.com/news/8-2-2022-application-wallet-incident
+slope-wallet-2022,Slope Finance (Medium),Slope Wallet Sentry Vulnerability — Digital Forensics and Incident Response Report,https://slope-finance.medium.com/slope-wallet-sentry-vulnerability-digital-forensics-and-incident-response-report-d7a5904e5a39
+slope-wallet-2022,CoinDesk,"Solana's $6M Exploit Likely Tied to Slope Wallet, Developers Say",https://www.coindesk.com/business/2022/08/03/solanas-latest-6m-exploit-likely-tied-to-slope-wallet-devs-say
+slope-wallet-2022,The Block,"Slope wallet provider saved user seed phrases in plain text, Solana security researchers find",https://www.theblock.co/post/161425/slope-wallet-provider-saved-user-seed-phrases-in-plain-text-solana-security-researchers-find
+solana-genesis-whale-2026,Cointelegraph,"ALERT: An early Solana whale tied to the Genesis distribution was likely hacked for 180,900 SOL ($14.2M) (X post)",https://x.com/Cointelegraph/status/2075583567455744086
+solana-genesis-whale-2026,The Coin Republic,Solana Genesis Wallet Loses $14.2M as SOL Price Tests Key Support,https://www.thecoinrepublic.com/2026/07/11/solana-genesis-wallet-loses-14-2m-as-sol-price-tests-key-support/
+solana-genesis-whale-2026,Crypto Adventure,Early Solana Wallet Drained Of $14.2M After Five Years Dormant,https://cryptoadventure.com/early-solana-wallet-drained-of-14-2m-after-five-years-dormant/
+solana-genesis-whale-2026,CryptoRank,Early Solana Whale May Have Lost $14.2 Million in SOL to Hackers,https://cryptorank.io/news/feed/ea11a-solana-whale-14-million-sol-stolen-hack
+solana-owner-permission-phishing-2025,SlowMist,Beware of Solana Phishing Attacks: Wallet Owner Permissions May Be Altered,https://slowmist.medium.com/beware-of-solana-phishing-attacks-wallet-owner-permissions-may-be-altered-708bbb30518e
+solana-owner-permission-phishing-2025,SlowMist (X),SlowMist on X: Beware of Solana #Phishing Attacks: Wallet Owner Permissions Can Be Altered,https://x.com/SlowMist_Team/status/1996528328061382860
+solana-owner-permission-phishing-2025,Coinpaper,Solana User Loses $3M as Hidden Wallet Permissions Exploited,https://coinpaper.com/12892/solana-user-loses-3-m-as-hidden-wallet-permissions-exploited
+solana-pumpfun-bot-malware-2025,SlowMist (Medium),A Popular Solana Tool on GitHub Conceals a Crypto-Stealing Trap,https://slowmist.medium.com/a-popular-solana-tool-on-github-conceals-a-crypto-stealing-trap-bfef0aed63d7
+solana-pumpfun-bot-malware-2025,Cryptopolitan,SlowMist finds 'Solana-pumpfun-bot' on GitHub contains a coin theft trap,https://www.cryptopolitan.com/slowmist-solana-pumpfun-bot-on-github-theft/
+solana-pumpfun-bot-malware-2025,CoinCentral,Hackers Use Fake Solana Bot on GitHub to Steal Crypto Wallet Funds,https://coincentral.com/hackers-use-fake-solana-bot-on-github-to-steal-crypto-wallet-funds/
+solana-rbpf-cve-2021-46102,BlockSec,New Integer Overflow Bug Discovered in Solana rBPF,https://blocksec.com/blog/new-integer-overflow-bug-discovered-in-solana-r-bpf
+solana-rbpf-cve-2021-46102,OSV (Open Source Vulnerabilities),CVE-2021-46102,https://osv.dev/vulnerability/CVE-2021-46102
+solana-rbpf-cve-2021-46102,GitLab Advisory Database,CVE-2021-46102 (solana_rbpf),https://advisories.gitlab.com/pkg/cargo/solana_rbpf/CVE-2021-46102/
+solana-web3js-npm-backdoor-2024,GitHub (solana-labs/solana-web3.js),"Security advisory GHSA-jcxm-7wvp-g6p5: Modified package published to npm, containing malware that exfiltrates private key material",https://github.com/solana-labs/solana-web3.js/security/advisories/GHSA-jcxm-7wvp-g6p5
+solana-web3js-npm-backdoor-2024,Anza,web3.js Exploit: Root Cause Analysis,https://www.anza.xyz/blog/web3-js-exploit-root-cause-analysis
+solana-web3js-npm-backdoor-2024,Web3 is Going Just Great,"Official Solana JavaScript library compromised in supply chain attack, at least $184,000 taken",https://www.web3isgoinggreat.com/single/solana-javascript-library-compromised
+solareum-2024,Decrypt,Solana Telegram Trading Bot to Shut Down After Users Drained of $523K,https://decrypt.co/224371/solana-telegram-trading-bot-shut-down-users-drained-523k
+solareum-2024,DL News,How a North Korean dev tricked a Solana trading bot team and stole $1.4m,https://www.dlnews.com/articles/regulation/how-a-dprk-developer-tricked-solareum-and-stole-14m/
+solareum-2024,Web3 is Going Just Great,Solana faces wave of drain attacks linked to trading bots including Solareum,https://www.web3isgoinggreat.com/?id=solana-drain-attacks
+solend-auth-bypass-2021,Solend (X/Twitter),"At 2021-08-19 12:40 GMT, an attacker attempted to exploit the Solend smart contract",https://twitter.com/solendprotocol/status/1428611597941891082
+solend-auth-bypass-2021,HackMD,Solend Protocol - Hacker Attempts To Steal ~$2M By Manipulating Core Parameters,https://hackmd.io/@prastut/r1wMdtcf3
+solend-auth-bypass-2021,Quadriga Initiative,Aug 2021 - Solend Insecure Authentication Check - $16k (Global),https://www.quadrigainitiative.com/casestudy/solendinsecureauthenticationcheck.php
+solend-usdh-oracle-manipulation-2022,Solend (Medium),USDH price manipulation impact on isolated pools,https://blog.solend.fi/usdh-price-manipulation-impact-on-isolated-pools-4f79ff6af2ba?gi=18f7ceaa85a8
+solend-usdh-oracle-manipulation-2022,The Block,Solend exploited for $1.26 million in market manipulation attack,https://www.theblock.co/post/182055/solend-exploited-attack
+solend-usdh-oracle-manipulation-2022,Ackee Blockchain,2022 Solana Hacks Explained: Solend,https://ackee.xyz/blog/2022-solana-hacks-explained-solend/
+spl-token-lending-rounding-bug-2021,Neodyme,"How to Become a Millionaire, 0.000001 BTC at a Time",https://neodyme.io/en/blog/lending_disclosure/
+spl-token-lending-rounding-bug-2021,Bitcoin.com News (via ExciteCrypto),"Bug in Solana Token Lending Contract Fixed, More Than $2 Billion Made Exploitable – Bitcoin News",https://excitecrypto.com/2021/12/bug-in-solana-token-lending-contract-fixed-more-than-2-billion-made-exploitable-bitcoin-news/
+spl-token-lending-rounding-bug-2021,Solend (Medium),Bug bounty and response to SPL lending vulnerability,https://blog.solend.fi/bug-bounty-and-response-to-spl-lending-vulnerability-f4c8874342d0
+step-finance-2026,The Block,Solana DeFi platform Step Finance investigating $29 million treasury wallet compromise,https://www.theblock.co/news/ecosystems/2026-01-31-solana-defi-platform-step-finance-investigating-29-million-treasury-wallet-compromise-387919
+step-finance-2026,CoinDesk,Step Finance shuts operations after $27 million January hack,https://www.coindesk.com/business/2026/02/24/step-finance-shuts-operations-after-usd27-million-january-hack
+step-finance-2026,BleepingComputer,Step Finance says compromised execs' devices led to $40M crypto theft,https://www.bleepingcomputer.com/news/security/step-finance-says-compromised-execs-devices-led-to-40m-crypto-theft/
+swissborg-kiln-2025,SwissBorg,Kiln Breach (Sep 2025): Security Impact on SwissBorg,https://swissborg.com/blog/swissborg-security-update-kiln-breach
+swissborg-kiln-2025,Protos,SwissBorg CEO blames $41M loss on staking partner Kiln,https://protos.com/swissborg-ceo-blames-41m-loss-on-staking-partner-kiln/
+swissborg-kiln-2025,Crowdfund Insider,Crypto Security Breach: SwissBorg Faces $41M Solana Theft,https://www.crowdfundinsider.com/2025/09/250488-crypto-security-breach-swissborg-faces-41m-solana-theft/
+swissborg-kiln-2025,Cointelegraph,SwissBorg hacked for $41M in Solana after Kiln API compromise,https://cointelegraph.com/news/swissborg-hacked-41m-sol-api-compromise
+swissborg-kiln-2025,The Block,Kiln exits Ethereum validators in safety move after SwissBorg's $40 million hack,https://www.theblock.co/post/370141/kiln-exits-ethereum-validators
+synthetify-dao-2023,Blockworks,DAO on Solana loses $230K after 'attack proposal' goes unnoticed,https://blockworks.co/news/solana-exploit-dao-hacker
+synthetify-dao-2023,Neodyme,How to Hack a DAO,https://neodyme.io/en/blog/how_to_hack_a_dao/
+texture-2025,Texture (X),"Texture on X: ""Post-Mortem""",https://x.com/texture_fi/status/1944851497897926737
+texture-2025,CryptoRank,Texture Finance hacker refunds 90% of loot after $2.2M exploit,https://cryptorank.io/news/feed/9a6a3-texture-finance-hacker-refunds-loot
+texture-2025,Mitrade,Texture Finance hacker refunds 90% of loot after $2.2M exploit,https://www.mitrade.com/insights/news/live-news/article-3-950065-20250711
+thunder-terminal-2023,Cointelegraph,"Thunder Terminal claims funds safe after $240K attack, hacker says otherwise",https://cointelegraph.com/news/thunder-terminal-hack-exploit-wallet-compromise-hacker-demands-ransom
+thunder-terminal-2023,crypto.news,"Thunder Terminal suffers hacker attack, losses amount to $240k",https://crypto.news/thunder-terminal-suffers-hacker-attack-losses-amount-to-240k/
+thunder-terminal-2023,nft now,Thunder Terminal Hack Leads to More Than 86 ETH and 439 SOL Drained,https://nftnow.com/news/thunder-terminal-hack-leads-to-86-eth-and-439-sol-drained/
+trapdoor-supply-chain-2026,CoinDesk,"Solana, Sui and Aptos wallet data targeted in TrapDoor package attack",https://www.coindesk.com/tech/2026/05/29/solana-sui-and-aptos-wallet-data-targeted-in-trapdoor-package-attack
+triple-a-2026,crypto.news,Triple-A hot wallets lose $9.7M in suspected exploit,https://crypto.news/triple-a-hot-wallets-lose-9-7m-in-suspected-exploit/
+triple-a-2026,Bitcoin.com News,Triple-A Hot Wallets Drained of $9.7 Million Across Six Chains: Here's What Peckshield Found,https://news.bitcoin.com/triple-a-hot-wallet-exploit-9-7-million-peckshield/
+triple-a-2026,Crypto Briefing,Triple-A hot wallet losses reach $12M amid security incident,https://cryptobriefing.com/triple-a-hot-wallet-12m-security-breach/
+upbit-2025,CoinDesk,"South Korean Crypto Exchange Upbit Reveals 5.9B-Won Corporate Loss in Nov. 27 Hack, Fully Reimburses Users",https://www.coindesk.com/markets/2025/11/28/upbit-reveals-5-9b-won-corporate-loss-in-latest-hack-fully-reimburses-users
+upbit-2025,CoinDesk,South Korea Suspects North Korea-Linked Lazarus Behind $36M Upbit Hack,https://www.coindesk.com/markets/2025/11/28/south-korea-suspects-north-korea-linked-lazarus-behind-usd36m-upbit-hack
+upbit-2025,Yahoo Finance,Upbit Finds Critical Wallet Flaw Amid Probe Into $30M Hack,https://finance.yahoo.com/news/upbit-finds-critical-wallet-flaw-103025503.html
+upbit-2025,Halborn,Explained: The Upbit Hack (November 2025),https://www.halborn.com/blog/post/explained-the-upbit-hack-november-2025
+wormhole-2022,Halborn,Explained: The Wormhole Hack (February 2022),https://www.halborn.com/blog/post/explained-the-wormhole-hack-february-2022
+wormhole-2022,CoinDesk,Jump Trading Backstops Wormhole's $320M Exploit Loss,https://www.coindesk.com/business/2022/02/03/jump-trading-backstops-wormholes-320m-exploit-loss-sources
+wormhole-2022,Blockworks,Jump Crypto Just Counter-Exploited the Wormhole Hacker for $140 Million,https://blockworks.com/news/jump-crypto-wormhole-hack-recovery
+zk-elgamal-proof-bug-2025-04,Solana Foundation,Post Mortem: ZK ElGamal Proof Program Bug,https://solana.com/news/post-mortem-may-2-2025
+zk-elgamal-proof-bug-2025-04,CoinDesk,Solana Quietly Fixes Bug That Could Have Let Attackers Mint and Steal Certain Tokens,https://www.coindesk.com/markets/2025/05/05/solana-quietly-fixes-bug-that-could-have-let-attackers-mint-and-steal-certain-tokens
+zk-elgamal-proof-bug-2025-04,Decrypt,Solana Patches Bug That Could Have Allowed Attackers to Mint and Swipe Tokens,https://decrypt.co/317894/solana-patches-bug-attackers-steal-tokens
+zk-elgamal-proof-bug-2025-06,Solana Foundation,"Post Mortem: ZK ElGamal Proof Program Bug, June 2025",https://solana.com/news/post-mortem-june-25-2025
+zk-elgamal-proof-bug-2025-06,zkSecurity (ZK/SEC Quarterly),Uncovering the Phantom Challenge Soundness Bug in Solana's ZK ElGamal Proof Program,https://blog.zksecurity.xyz/posts/solana-phantom-challenge-bug/
+zk-elgamal-proof-bug-2025-06,GitHub solana-program/token-2022,Re-enabling the ZK ElGamal Proof Program and Token-22 Confidential Transfer Features (Issue #657),https://github.com/solana-program/token-2022/issues/657

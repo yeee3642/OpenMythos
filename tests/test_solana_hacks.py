@@ -8,7 +8,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "solana_hacks"))
 
-import build_db  # noqa: E402
+import build_db
 
 
 @pytest.fixture(scope="module")

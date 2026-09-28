@@ -89,9 +89,7 @@ def validate(incidents: list[dict], lookups: dict) -> list[str]:
 
         for field in ("loss_usd", "recovered_usd"):
             value = inc[field]
-            if value is not None and (
-                not isinstance(value, (int, float)) or value < 0
-            ):
+            if value is not None and (not isinstance(value, (int, float)) or value < 0):
                 errors.append(f"{label}: {field} must be a non-negative number")
 
         for field in ("project", "attack_vector", "attribution", "summary_zh"):
@@ -139,10 +137,7 @@ def build(db_path: Path) -> sqlite3.Connection:
     )
     conn.executemany(
         "INSERT INTO recovery_statuses (code, name_zh, name_en) VALUES (?, ?, ?)",
-        [
-            (r["code"], r["name_zh"], r["name_en"])
-            for r in lookups["recovery_statuses"]
-        ],
+        [(r["code"], r["name_zh"], r["name_en"]) for r in lookups["recovery_statuses"]],
     )
 
     placeholders = ", ".join("?" for _ in INCIDENT_FIELDS)

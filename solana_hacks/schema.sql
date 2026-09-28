@@ -108,13 +108,16 @@ JOIN categories        c  ON c.code  = i.category
 JOIN recovery_statuses rs ON rs.code = i.recovery_status;
 
 -- 年度統計
+-- total_loss_usd 含多鏈事件的全部損失；solana_only_loss_usd 只計純 Solana 事件。
 CREATE VIEW v_yearly_summary AS
 SELECT
     year,
-    COUNT(*)                        AS incidents,
-    SUM(COALESCE(loss_usd, 0))      AS total_loss_usd,
-    SUM(COALESCE(recovered_usd, 0)) AS total_recovered_usd,
-    MAX(loss_usd)                   AS largest_loss_usd
+    COUNT(*)                                        AS incidents,
+    SUM(COALESCE(loss_usd, 0))                      AS total_loss_usd,
+    SUM(CASE WHEN chain_scope = 'solana_only'
+             THEN COALESCE(loss_usd, 0) ELSE 0 END) AS solana_only_loss_usd,
+    SUM(COALESCE(recovered_usd, 0))                 AS total_recovered_usd,
+    MAX(loss_usd)                                   AS largest_loss_usd
 FROM v_incidents
 GROUP BY year
 ORDER BY year;
@@ -124,8 +127,10 @@ CREATE VIEW v_category_summary AS
 SELECT
     category,
     category_zh,
-    COUNT(*)                   AS incidents,
-    SUM(COALESCE(loss_usd, 0)) AS total_loss_usd
+    COUNT(*)                                        AS incidents,
+    SUM(COALESCE(loss_usd, 0))                      AS total_loss_usd,
+    SUM(CASE WHEN chain_scope = 'solana_only'
+             THEN COALESCE(loss_usd, 0) ELSE 0 END) AS solana_only_loss_usd
 FROM v_incidents
 GROUP BY category, category_zh
 ORDER BY total_loss_usd DESC;
@@ -135,8 +140,10 @@ CREATE VIEW v_project_type_summary AS
 SELECT
     project_type,
     project_type_zh,
-    COUNT(*)                   AS incidents,
-    SUM(COALESCE(loss_usd, 0)) AS total_loss_usd
+    COUNT(*)                                        AS incidents,
+    SUM(COALESCE(loss_usd, 0))                      AS total_loss_usd,
+    SUM(CASE WHEN chain_scope = 'solana_only'
+             THEN COALESCE(loss_usd, 0) ELSE 0 END) AS solana_only_loss_usd
 FROM v_incidents
 GROUP BY project_type, project_type_zh
 ORDER BY total_loss_usd DESC;
