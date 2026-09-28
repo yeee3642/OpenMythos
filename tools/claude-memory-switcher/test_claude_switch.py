@@ -41,6 +41,19 @@ def live_snapshot(home: Path) -> dict:
     return {
         "claude": snapshot(home / ".claude"),
         "claude.json": snapshot(home / ".claude.json"),
+        "desktop": snapshot(desktop_sessions(home)),
+    }
+
+
+def isolated_env(h: Path) -> dict:
+    """Every location the tool may touch, pointed inside the fake home, so the
+    tests can never move a developer's real Claude data."""
+    return {
+        "HOME": str(h),
+        "USERPROFILE": str(h),
+        "APPDATA": str(h / "AppData" / "Roaming"),
+        "LOCALAPPDATA": str(h / "AppData" / "Local"),
+        "XDG_CONFIG_HOME": str(h / ".config"),
     }
 
 
@@ -48,12 +61,29 @@ def live_snapshot(home: Path) -> dict:
 def home(tmp_path, monkeypatch):
     h = tmp_path / "home"
     h.mkdir()
-    monkeypatch.setenv("HOME", str(h))
-    monkeypatch.setenv("USERPROFILE", str(h))
+    for k, v in isolated_env(h).items():
+        monkeypatch.setenv(k, v)
     for var in ("CLAUDE_CONFIG_DIR", "CLAUDE_SWITCH_HOME"):
         monkeypatch.delenv(var, raising=False)
     cs.set_lang("en")
     return h
+
+
+def desktop_key() -> str:
+    return "mac" if sys.platform == "darwin" else "win" if os.name == "nt" else "linux"
+
+
+def desktop_sessions(h: Path) -> Path:
+    """Where Claude Desktop keeps its Code session list on this OS, for a fake
+    home h laid out by isolated_env().  Computed from h alone -- never from the
+    current environment -- so populate() can't write into a real home."""
+    if sys.platform == "darwin":
+        base = h / "Library" / "Application Support" / "Claude"
+    elif os.name == "nt":
+        base = h / "AppData" / "Roaming" / "Claude"
+    else:
+        base = h / ".config" / "Claude"
+    return base / cs.DESKTOP_SESSIONS
 
 
 def populate(home: Path) -> None:
@@ -73,6 +103,13 @@ def populate(home: Path) -> None:
     (c / "local" / "claude").write_text("#!/bin/sh\n")
     (c / "ide").mkdir()
     (c / "ide" / "1234.lock").write_text("{}")
+    (c / ".device-keys.json").write_text('{"k": 1}')
+    (c / "chrome").mkdir()
+    (c / "chrome" / "chrome-native-host").write_text("#!/bin/sh\n")
+    d = desktop_sessions(home) / "acct" / "org"
+    d.mkdir(parents=True)
+    (d / "local_1.json").write_text('{"cliSessionId": "abc"}')
+    (d / "scheduled-tasks.json").write_text("[]")
     (home / ".claude.json").write_text(json.dumps({
         "oauthAccount": {"emailAddress": "me@example.com", "organizationUuid": "org"},
         "userID": "abc123",
@@ -277,7 +314,7 @@ def test_failure_mid_switch_rolls_back(home, monkeypatch):
 
 
 @pytest.mark.parametrize("direction", ["forward", "back"])
-@pytest.mark.parametrize("crash_at", list(range(10)))
+@pytest.mark.parametrize("crash_at", list(range(12)))
 def test_repair_after_hard_crash(home, monkeypatch, direction, crash_at):
     populate(home)
     before = live_snapshot(home)
@@ -292,7 +329,7 @@ def test_repair_after_hard_crash(home, monkeypatch, direction, crash_at):
     assert live_snapshot(home) == before
     state = cs.load_state(paths)
     plan = cs.plan_switch(paths, state, "clean")
-    assert len(plan.moves) == 10
+    assert len(plan.moves) == 11  # 8 parked + 3 brought back
     if crash_at >= len(plan.moves):
         pytest.skip("crash point beyond plan")
 
@@ -307,8 +344,8 @@ def test_repair_after_hard_crash(home, monkeypatch, direction, crash_at):
     with pytest.raises(cs.SwitchError):
         cs.execute_plan(paths, state, plan, fail_hook=boom)
     monkeypatch.undo()
-    monkeypatch.setenv("HOME", str(home))
-    monkeypatch.setenv("USERPROFILE", str(home))
+    for k, v in isolated_env(home).items():
+        monkeypatch.setenv(k, v)
 
     state = cs.load_state(paths)
     assert state["journal"] is not None
@@ -329,7 +366,7 @@ def test_repair_after_hard_crash(home, monkeypatch, direction, crash_at):
     assert not (paths.store / cs.CONFLICTS_DIR).exists()
 
 
-@pytest.mark.parametrize("fail_at", list(range(1, 11)))
+@pytest.mark.parametrize("fail_at", list(range(1, 12)))
 def test_rollback_at_every_step(home, monkeypatch, fail_at):
     """An error at any move leaves both profiles exactly as they were."""
     populate(home)
@@ -341,6 +378,7 @@ def test_rollback_at_every_step(home, monkeypatch, fail_at):
     cs.switch_to(paths, "original", opts())
     orig_live = live_snapshot(home)
     stored_clean = snapshot(paths.profile_dir("clean"))
+    assert len(cs.plan_switch(paths, cs.load_state(paths), "clean").moves) == 11
     real_move = cs.move
     calls = {"n": 0}
 
@@ -383,7 +421,8 @@ def test_repair_keeps_files_recreated_during_crash(home, monkeypatch):
     with pytest.raises(cs.SwitchError):
         cs.execute_plan(paths, state, plan, fail_hook=boom)
     monkeypatch.undo()
-    monkeypatch.setenv("HOME", str(home))
+    for k, v in isolated_env(home).items():
+        monkeypatch.setenv(k, v)
     cs.repair(paths, opts(), direction="back")
     assert live_snapshot(home) == before
     kept = list((paths.store / cs.CONFLICTS_DIR).rglob(".claude.json"))
@@ -765,6 +804,141 @@ def test_doctor(home, monkeypatch):
     out = "\n".join(cs.doctor(P(home)))
     assert "elsewhere" in out and "CLAUDE_CONFIG_DIR=/x" in out and "ANTHROPIC_API_KEY" in out
     assert str(home / "app" / "CLAUDE.md") in out
+
+
+# --------------------------------------------------------------------------
+# real processes / real CLI (no mocks)
+# --------------------------------------------------------------------------
+
+SCRIPT = str(Path(__file__).resolve().parent / "claude_switch.py")
+
+
+def test_process_table_is_readable_on_this_os():
+    assert cs.scan_processes() is not None
+
+
+def test_real_cli_round_trip_in_subprocess(tmp_path):
+    import subprocess
+
+    home = tmp_path / "home"
+    home.mkdir()
+    populate(home)
+    before = live_snapshot(home)
+    env = dict(os.environ, CLAUDE_SWITCH_LANG="en", PYTHONUTF8="1", **isolated_env(home))
+    for var in ("CLAUDE_CONFIG_DIR", "CLAUDE_SWITCH_HOME"):
+        env.pop(var, None)
+    # Real detection; on a dev machine where Claude itself is running, force.
+    extra = ["--force"] if cs.scan_processes() else []
+
+    def run(*args):
+        r = subprocess.run([sys.executable, SCRIPT, *args], env=env, capture_output=True, text=True,
+                           encoding="utf-8", timeout=120)
+        assert r.returncode == 0, (args, r.stdout, r.stderr)
+        return r.stdout
+
+    run("clean", *extra)
+    assert not (home / ".claude" / "CLAUDE.md").exists()
+    assert "clean" in run("--lang", "zh", "status")
+    run("toggle", *extra)
+    assert live_snapshot(home) == before
+    run("doctor")
+
+
+@pytest.mark.skipif(not os.environ.get("CI"), reason="copies the Python binary next to itself; CI only")
+def test_detects_a_real_process_named_claude(tmp_path):
+    """Start a process whose executable is called claude(.exe) and check that
+    the platform's process scan reports it as Claude Code."""
+    import shutil
+    import subprocess
+    import time
+
+    exe = Path(sys.executable).resolve()
+    fake = exe.with_name("claude" + (".exe" if os.name == "nt" else ""))
+    shutil.copy2(str(exe), str(fake))
+    proc = subprocess.Popen([str(fake), "-c", "import time; time.sleep(60)"])
+    try:
+        found = []
+        for _ in range(20):
+            found = [p for p in (cs.scan_processes() or []) if p.pid == proc.pid]
+            if found:
+                break
+            time.sleep(0.5)
+        assert found and found[0].kind == "cli", cs.scan_processes()
+        home = tmp_path / "home"
+        home.mkdir()
+        populate(home)
+        env = dict(os.environ, CLAUDE_SWITCH_LANG="en", **isolated_env(home))
+        r = subprocess.run([sys.executable, SCRIPT, "clean"], env=env, capture_output=True, text=True,
+                           encoding="utf-8", timeout=120)
+        assert r.returncode == 3, (r.stdout, r.stderr)
+        assert (home / ".claude" / "CLAUDE.md").exists()
+    finally:
+        proc.kill()
+        proc.wait()
+        try:
+            fake.unlink()
+        except OSError:
+            pass
+
+
+def test_desktop_session_list_switches_with_the_profile(home):
+    assert cs.Paths().desktop_app_dirs()[0] == (desktop_key(), desktop_sessions(home).parent)
+    populate(home)
+    before = live_snapshot(home)
+    paths = P(home)
+    cs.clean(paths, opts())
+    assert not desktop_sessions(home).exists()  # Desktop shows no old Code sessions
+    key = desktop_key()
+    parked = paths.profile_dir("original") / "desktop" / key / "acct" / "org" / "local_1.json"
+    assert parked.read_text() == '{"cliSessionId": "abc"}'
+    # Desktop creates a new session while "clean" is active
+    new = desktop_sessions(home) / "acct" / "org" / "local_2.json"
+    new.parent.mkdir(parents=True)
+    new.write_text("{}")
+    cs.switch_to(paths, "original", opts())
+    assert live_snapshot(home) == before
+    cs.switch_to(paths, "clean", opts())
+    assert new.read_text() == "{}"
+
+
+def test_desktop_data_from_another_os_stays_parked(home):
+    populate(home)
+    paths = P(home)
+    cs.clean(paths, opts())
+    foreign = paths.profile_dir("original") / "desktop" / "some-other-os"
+    foreign.mkdir(parents=True)
+    (foreign / "x.json").write_text("{}")
+    cs.switch_to(paths, "original", opts())
+    assert (foreign / "x.json").exists()
+
+
+def test_global_config_variants_are_switched_and_seeded(home):
+    populate(home)
+    (home / ".claude-custom-oauth.json").write_text(json.dumps(
+        {"oauthAccount": {"emailAddress": "fed@x"}, "projects": {"/p": {}}}))
+    before = live_snapshot(home)
+    variant_before = (home / ".claude-custom-oauth.json").read_text()
+    paths = P(home)
+    cs.clean(paths, opts())
+    seeded = json.loads((home / ".claude-custom-oauth.json").read_text())
+    assert seeded == {"oauthAccount": {"emailAddress": "fed@x"}}
+    assert not (home / ".claude-staging-oauth.json").exists()
+    cs.switch_to(paths, "original", opts())
+    assert live_snapshot(home) == before
+    assert (home / ".claude-custom-oauth.json").read_text() == variant_before
+
+
+def test_export_import_includes_desktop_sessions(home, tmp_path):
+    populate(home)
+    paths = P(home)
+    cs.init_state(paths)
+    z = cs.export_profile(paths, "original", out=str(tmp_path / "d.zip"))
+    key = desktop_key()
+    with zipfile.ZipFile(z) as zf:
+        assert "desktop/%s/acct/org/local_1.json" % key in zf.namelist()
+        assert not any("device-keys" in n or n.startswith("config/chrome") for n in zf.namelist())
+    cs.import_profile(paths, str(z), "copy")
+    assert (paths.profile_dir("copy") / "desktop" / key / "acct" / "org" / "local_1.json").exists()
 
 
 def test_messages_have_both_languages_and_matching_fields():

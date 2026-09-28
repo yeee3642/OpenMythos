@@ -61,9 +61,20 @@ CONFLICTS_DIR = "_conflicts"
 MANIFEST_NAME = "claude-switch-manifest.json"
 
 # Inside a profile folder: children of the config dir go to "config/", the
-# global config file (~/.claude.json) goes to "claude.json".
+# global config file (~/.claude.json) goes to "claude.json", and Claude
+# Desktop's list of Code sessions goes to "desktop/<where>".
 SLOT_CONFIG = "config"
 SLOT_GLOBAL = "claude.json"
+SLOT_DESKTOP = "desktop"
+
+# ~/.claude<suffix>.json: "" is the normal one; the others belong to non-default
+# sign-in environments and exist only on machines that used them.
+GLOBAL_SUFFIXES = ("", "-custom-oauth", "-staging-oauth", "-local-oauth")
+
+# Claude Desktop keeps its Code-tab session records (and the schedule of its
+# local scheduled tasks) here, inside its app-data folder.  The transcripts
+# they point to live in ~/.claude/projects, so the two are switched together.
+DESKTOP_SESSIONS = "claude-code-sessions"
 
 DEFAULT_OLD_NAME = "original"
 DEFAULT_CLEAN_NAME = "clean"
@@ -85,6 +96,11 @@ PINNED_CHILDREN = {
     # supervisor's lock.  They describe this machine right now, not a profile.
     "sessions": "runtime",
     "daemon.lock": "runtime",
+    # Per-machine device identity (its macOS Keychain twin is shared anyway).
+    ".device-keys.json": "device",
+    # Native-messaging host for the Claude in Chrome extension; the browser's
+    # manifest points at this path.
+    "chrome": "integration",
 }
 
 # Keys copied from the current ~/.claude.json into a fresh profile, so the
@@ -200,8 +216,10 @@ MESSAGES: Dict[str, Tuple[str, str]] = {
         "Claude 正在執行中。請先關閉，避免它在切換時寫入檔案：",
     ),
     "claude_running_hint": (
-        "Exit Claude Code sessions (type /exit) and quit Claude Desktop, or pass --force to switch anyway.",
-        "請結束 Claude Code 工作階段（輸入 /exit）並關閉 Claude Desktop，或加上 --force 強制切換。",
+        "Exit Claude Code sessions (/exit), stop background sessions (claude daemon stop --any) and fully quit "
+        "Claude Desktop (Cmd+Q / tray icon -> Quit; closing the window is not enough). Or pass --force.",
+        "請結束 Claude Code 工作階段（輸入 /exit）、停止背景工作階段（claude daemon stop --any），"
+        "並完全結束 Claude Desktop（Cmd+Q／系統匣圖示 → Quit，只關視窗不夠）。或加上 --force 強制切換。",
     ),
     "proc_desktop": ("Claude Desktop", "Claude Desktop"),
     "proc_cli": ("Claude Code", "Claude Code"),
@@ -298,7 +316,7 @@ MESSAGES: Dict[str, Tuple[str, str]] = {
     "where_config_dir": ("Claude config dir", "Claude 設定資料夾"),
     "where_global": ("Claude global config", "Claude 全域設定檔"),
     "where_store": ("Profile store", "設定檔倉庫"),
-    "where_desktop": ("Claude Desktop data (not switched)", "Claude Desktop 資料（不會被切換）"),
+    "where_desktop_sessions": ("Claude Desktop Code-session list", "Claude Desktop 的 Code 工作階段清單"),
     "repair_choose": (
         "Unfinished switch '{src}' -> '{dst}' ({done}/{total} steps done). [f]inish it or [r]oll it back? ",
         "未完成的切換「{src}」→「{dst}」（已完成 {done}/{total} 步）。要 [f] 完成它 還是 [r] 還原？",
@@ -335,6 +353,14 @@ MESSAGES: Dict[str, Tuple[str, str]] = {
     "doctor_desktop_mcp": (
         "Claude Desktop has its own MCP servers in {file}; they are not part of a profile.",
         "Claude Desktop 在 {file} 有自己的 MCP 伺服器設定，它不屬於設定檔。",
+    ),
+    "doctor_desktop_login": (
+        "Claude Desktop signs in on its own; switching profiles does not change its account.",
+        "Claude Desktop 有自己的登入；切換設定檔不會改變它登入的帳號。",
+    ),
+    "doctor_cowork": (
+        "Cowork sessions and Cowork memory ({dir}) belong to Claude Desktop and are not switched.",
+        "Cowork 的工作階段與記憶（{dir}）屬於 Claude Desktop，不會被切換。",
     ),
     "doctor_keychain": (
         "macOS: your login (and MCP / plugin secrets) is in the Keychain and is shared by all profiles.",
@@ -665,19 +691,20 @@ class Paths:
         self.home = Path.home()
         env_dir = os.environ.get("CLAUDE_CONFIG_DIR", "").strip()
         self.config_dir_from_env = bool(env_dir)
-        if env_dir:
-            self.config_dir = Path(os.path.expanduser(env_dir)).absolute()
-            self.global_config = self.config_dir / ".claude.json"
-        else:
-            self.config_dir = self.home / ".claude"
-            self.global_config = self.home / ".claude.json"
+        self.config_dir = Path(os.path.expanduser(env_dir)).absolute() if env_dir else self.home / ".claude"
+        base = self.config_dir if env_dir else self.home
+        # (live file, name inside a profile folder); the first is ~/.claude.json
+        self.global_files: List[Tuple[Path, Path]] = [
+            (base / (".claude%s.json" % sfx), Path("claude%s.json" % sfx)) for sfx in GLOBAL_SUFFIXES
+        ]
+        self.global_config = self.global_files[0][0]
         # Old versions kept the global config at <config dir>/.config.json.
         # Claude Code still prefers that file whenever it exists.  It lives in
         # the config dir, so it is switched along with everything else there.
         self.legacy_config = self.config_dir / ".config.json"
         store_env = os.environ.get("CLAUDE_SWITCH_HOME", "").strip()
-        base = store or store_env
-        self.store = Path(os.path.expanduser(base)).absolute() if base else self.home / ".claude-profiles"
+        store = store or store_env
+        self.store = Path(os.path.expanduser(store)).absolute() if store else self.home / ".claude-profiles"
 
     # -- store layout --------------------------------------------------
     @property
@@ -698,17 +725,37 @@ class Paths:
         """The global config file Claude Code actually reads right now."""
         return self.legacy_config if lexists(self.legacy_config) else self.global_config
 
-    def desktop_dirs(self) -> List[Path]:
+    def desktop_app_dirs(self) -> List[Tuple[str, Path]]:
+        """(key, folder) for every place Claude Desktop may keep its app data."""
         if IS_MAC:
-            return [self.home / "Library" / "Application Support" / "Claude"]
+            return [("mac", self.home / "Library" / "Application Support" / "Claude")]
         if IS_WINDOWS:
-            out = []
-            for var in ("APPDATA", "LOCALAPPDATA"):
-                v = os.environ.get(var)
-                if v:
-                    out.append(Path(v) / "Claude")
+            out: List[Tuple[str, Path]] = []
+            appdata = os.environ.get("APPDATA")
+            if appdata:
+                out.append(("win", Path(appdata) / "Claude"))
+            local = os.environ.get("LOCALAPPDATA")
+            if local:
+                # MSIX installs are virtualized under Packages\Claude_<publisher id>.
+                try:
+                    fams = sorted(d for d in (Path(local) / "Packages").glob("Claude_*") if d.is_dir())
+                except OSError:
+                    fams = []
+                for d in fams:
+                    out.append(("msix-" + d.name, d / "LocalCache" / "Roaming" / "Claude"))
             return out
-        return [self.home / ".config" / "Claude"]
+        xdg = os.environ.get("XDG_CONFIG_HOME", "").strip()
+        return [("linux", (Path(xdg) if xdg else self.home / ".config") / "Claude")]
+
+    def desktop_dirs(self) -> List[Path]:
+        return [d for _k, d in self.desktop_app_dirs()]
+
+    def unit_slots(self) -> List[Tuple[Path, Path]]:
+        """Things switched as a single unit: (live path, path inside a profile)."""
+        slots = list(self.global_files)
+        for key, d in self.desktop_app_dirs():
+            slots.append((d / DESKTOP_SESSIONS, Path(SLOT_DESKTOP) / key))
+        return slots
 
 
 # --------------------------------------------------------------------------
@@ -744,6 +791,8 @@ def classify_posix(comm: str, args: str) -> Optional[str]:
     exe = comm or args.split(" ")[0]
     base = exe.rsplit("/", 1)[-1]
     if "/Claude.app/Contents/" in exe or (not comm and "/Claude.app/Contents/" in args.split(" -")[0]):
+        return "desktop"
+    if base == "claude-desktop":  # Linux build of Claude Desktop
         return "desktop"
     if base == "claude" or _VERSION_EXE.search(exe):
         return "cli"
@@ -1109,16 +1158,19 @@ def _live_items(paths: Paths) -> List[Tuple[Path, Path]]:
     """(live path, path relative to a profile folder) for everything that is
     profile data right now."""
     items: List[Tuple[Path, Path]] = []
+    units = paths.unit_slots()
+    unit_lives = {os.path.normcase(str(live)) for live, _ in units}
     if paths.config_dir.is_dir():
         for child in sorted(os.listdir(str(paths.config_dir))):
             if child in PINNED_CHILDREN:
                 continue
             live = paths.config_dir / child
-            if live == paths.global_config:  # CLAUDE_CONFIG_DIR/.claude.json
+            if os.path.normcase(str(live)) in unit_lives:  # CLAUDE_CONFIG_DIR/.claude.json
                 continue
             items.append((live, Path(SLOT_CONFIG) / child))
-    if lexists(paths.global_config):
-        items.append((paths.global_config, Path(SLOT_GLOBAL)))
+    for live, rel in units:
+        if lexists(live):
+            items.append((live, rel))
     return items
 
 
@@ -1134,9 +1186,17 @@ def _stored_items(paths: Paths, name: str) -> Tuple[List[Tuple[Path, Path]], Lis
                 skipped.append(child)
                 continue
             items.append((cfg / child, paths.config_dir / child))
-    g = pdir / SLOT_GLOBAL
-    if lexists(g):
-        items.append((g, paths.global_config))
+    units = paths.unit_slots()
+    for live, rel in units:
+        if lexists(pdir / rel):
+            items.append((pdir / rel, live))
+    # Desktop data from a different kind of install / OS: leave it parked.
+    known = {rel.name for _live, rel in units if rel.parts[0] == SLOT_DESKTOP}
+    ddir = pdir / SLOT_DESKTOP
+    if ddir.is_dir():
+        for key in sorted(os.listdir(str(ddir))):
+            if key not in known:
+                skipped.append("%s/%s" % (SLOT_DESKTOP, key))
     return items, skipped
 
 
@@ -1321,8 +1381,9 @@ def _guard(paths: Paths, state: Dict[str, Any], opts: Options) -> None:
         raise SwitchError(t("journal_pending", op=j["op"], src=j["from"], dst=j["to"]))
     _check_live_signature(paths, state, opts.force)
     _check_store_location(paths)
-    if not same_device(paths.store, paths.config_dir) or not same_device(paths.store, paths.global_config.parent):
-        raise SwitchError(t("cross_device", store=paths.store, live=paths.config_dir))
+    for where_ in [paths.config_dir] + [live.parent for live, _ in paths.unit_slots()]:
+        if not same_device(paths.store, where_):
+            raise SwitchError(t("cross_device", store=paths.store, live=where_))
     _wait_for_claude_to_exit(opts)
 
 
@@ -1451,26 +1512,28 @@ def _sync_account(paths: Paths, old_profile: str) -> None:
     account shown by the incoming profile should match the one that is really
     signed in.  Copy it from the profile we just parked."""
     pdir = paths.profile_dir(old_profile)
-    old_file = pdir / SLOT_CONFIG / ".config.json"
-    if not old_file.is_file():
-        old_file = pdir / SLOT_GLOBAL
-    new_file = paths.effective_config()
-    if not (old_file.is_file() and new_file.is_file()):
-        return
-    try:
-        old_cfg, new_cfg = read_json(old_file), read_json(new_file)
-    except (OSError, ValueError):
-        return
-    if not (isinstance(old_cfg, dict) and isinstance(new_cfg, dict)):
-        return
-    changed = False
-    for key in ACCOUNT_KEYS:
-        if key in old_cfg and new_cfg.get(key) != old_cfg[key]:
-            new_cfg[key] = old_cfg[key]
-            changed = True
-    if changed:
-        mode = stat.S_IMODE(os.stat(str(new_file)).st_mode)
-        write_json_atomic(new_file, new_cfg, mode=mode)
+    for i, (live, rel) in enumerate(paths.global_files):
+        old_file, new_file = pdir / rel, live
+        if i == 0:
+            if (pdir / SLOT_CONFIG / ".config.json").is_file():
+                old_file = pdir / SLOT_CONFIG / ".config.json"
+            new_file = paths.effective_config()
+        if not (old_file.is_file() and new_file.is_file()):
+            continue
+        try:
+            old_cfg, new_cfg = read_json(old_file), read_json(new_file)
+        except (OSError, ValueError):
+            continue
+        if not (isinstance(old_cfg, dict) and isinstance(new_cfg, dict)):
+            continue
+        changed = False
+        for key in ACCOUNT_KEYS:
+            if key in old_cfg and new_cfg.get(key) != old_cfg[key]:
+                new_cfg[key] = old_cfg[key]
+                changed = True
+        if changed:
+            mode = stat.S_IMODE(os.stat(str(new_file)).st_mode)
+            write_json_atomic(new_file, new_cfg, mode=mode)
 
 
 def _apply_settings(settings_file: Path, values: Dict[str, Any]) -> None:
@@ -1487,11 +1550,11 @@ def _apply_settings(settings_file: Path, values: Dict[str, Any]) -> None:
     write_json_atomic(settings_file, data)
 
 
-def _seed_global_config(paths: Paths) -> Dict[str, Any]:
+def _seed_global_config(paths: Paths, source: Optional[Path] = None) -> Dict[str, Any]:
     """Login, onboarding and install keys from the current global config."""
     cfg: Dict[str, Any] = {}
     try:
-        source = paths.effective_config()
+        source = source or paths.effective_config()
         if source.is_file():
             current = read_json(source)
             if isinstance(current, dict):
@@ -1520,13 +1583,17 @@ def create_profile(paths: Paths, state: Dict[str, Any], name: str, note: Optiona
                     copy_any(live, tmp / rel)
             else:
                 sdir = paths.profile_dir(src)
-                for rel in (SLOT_CONFIG, SLOT_GLOBAL):
+                for rel in [SLOT_CONFIG, SLOT_DESKTOP] + [str(r) for _l, r in paths.global_files]:
                     if lexists(sdir / rel):
                         copy_any(sdir / rel, tmp / rel)
             (tmp / SLOT_CONFIG).mkdir(exist_ok=True)
         else:
             (tmp / SLOT_CONFIG).mkdir()
-            write_json_atomic(tmp / SLOT_GLOBAL, _seed_global_config(paths), mode=0o600)
+            for i, (live, rel) in enumerate(paths.global_files):
+                if i == 0:
+                    write_json_atomic(tmp / rel, _seed_global_config(paths), mode=0o600)
+                elif lexists(live):
+                    write_json_atomic(tmp / rel, _seed_global_config(paths, live), mode=0o600)
             copied = []
             for item in copy_items:
                 item = item.strip().strip("/\\")
@@ -1769,8 +1836,13 @@ def _profile_sources(paths: Paths, state: Dict[str, Any], name: str) -> List[Tup
         for child in sorted(os.listdir(str(cfg))):
             if child not in PINNED_CHILDREN:
                 out.append((cfg / child, "%s/%s" % (SLOT_CONFIG, child)))
-    if lexists(pdir / SLOT_GLOBAL):
-        out.append((pdir / SLOT_GLOBAL, SLOT_GLOBAL))
+    for _live, rel in paths.global_files:
+        if lexists(pdir / rel):
+            out.append((pdir / rel, rel.as_posix()))
+    ddir = pdir / SLOT_DESKTOP
+    if ddir.is_dir():
+        for key in sorted(os.listdir(str(ddir))):
+            out.append((ddir / key, "%s/%s" % (SLOT_DESKTOP, key)))
     return out
 
 
@@ -1785,8 +1857,9 @@ def export_profile(paths: Paths, name: str, out: Optional[str] = None, include_s
     skipped_links: List[str] = []
     tmp = dest.with_name(dest.name + ".partial")
     with zipfile.ZipFile(str(tmp), "w", zipfile.ZIP_DEFLATED, allowZip64=True) as z:
+        global_arcs = {rel.as_posix() for _l, rel in paths.global_files}
         for src, arc in _profile_sources(paths, state, name):
-            if arc == SLOT_GLOBAL and not include_secrets:
+            if arc in global_arcs and not include_secrets:
                 try:
                     cfg = read_json(src)
                     if isinstance(cfg, dict):
@@ -1858,9 +1931,17 @@ def _safe_member(name: str) -> Optional[str]:
         return None
     if not parts:
         return None
-    if parts[0] not in (SLOT_CONFIG, SLOT_GLOBAL, MANIFEST_NAME):
-        return None
-    if parts[0] == SLOT_CONFIG and len(parts) > 1 and parts[1] in PINNED_CHILDREN:
+    globals_ = {"claude%s.json" % sfx for sfx in GLOBAL_SUFFIXES}
+    if parts[0] in globals_ or parts[0] == MANIFEST_NAME:
+        if len(parts) != 1:
+            return None
+    elif parts[0] == SLOT_CONFIG:
+        if len(parts) > 1 and parts[1] in PINNED_CHILDREN:
+            return None
+    elif parts[0] == SLOT_DESKTOP:
+        if len(parts) < 2 or not re.match(r"^[A-Za-z0-9_.-]+$", parts[1]):
+            return None
+    else:
         return None
     return "/".join(parts)
 
@@ -1901,6 +1982,11 @@ def import_profile(paths: Paths, archive: str, name: Optional[str] = None) -> st
                     Path(_long(target.parent)).mkdir(parents=True, exist_ok=True)
                     with z.open(info) as fin, open(_long(target), "wb") as fout:
                         shutil.copyfileobj(fin, fout)
+                    if len(rel.split("/")) == 1:  # claude*.json: private
+                        try:
+                            os.chmod(_long(target), 0o600)
+                        except OSError:
+                            pass
                 (tmp / SLOT_CONFIG).mkdir(exist_ok=True)
                 os.rename(str(tmp), str(paths.profile_dir(name)))
             except BaseException:
@@ -2009,6 +2095,9 @@ def doctor(paths: Paths) -> List[str]:
     if paths.config_dir_from_env:
         notes.append(t("config_dir_env_note"))
     for d in paths.desktop_dirs():
+        if not d.is_dir():
+            continue
+        notes.append(t("doctor_desktop_login"))
         f = d / "claude_desktop_config.json"
         try:
             cfg = read_json(f)
@@ -2016,6 +2105,8 @@ def doctor(paths: Paths) -> List[str]:
                 notes.append(t("doctor_desktop_mcp", file=f))
         except (OSError, ValueError):
             pass
+        if (d / "local-agent-mode-sessions").is_dir():
+            notes.append(t("doctor_cowork", dir=d / "local-agent-mode-sessions"))
     if IS_MAC:
         notes.append(t("doctor_keychain"))
     projects = scan_projects(paths)
@@ -2031,8 +2122,9 @@ def where(paths: Paths) -> None:
     say("%s: %s" % (t("where_config_dir"), paths.config_dir))
     say("%s: %s" % (t("where_global"), paths.global_config))
     say("%s: %s" % (t("where_store"), paths.store))
-    for d in paths.desktop_dirs():
-        say("%s: %s%s" % (t("where_desktop"), d, "" if d.exists() else "  (-)"))
+    for live, rel in paths.unit_slots():
+        if rel.parts[0] == SLOT_DESKTOP:
+            say("%s: %s%s" % (t("where_desktop_sessions"), live, "" if lexists(live) else "  (-)"))
     if paths.config_dir_from_env:
         say(t("config_dir_env_note"))
 

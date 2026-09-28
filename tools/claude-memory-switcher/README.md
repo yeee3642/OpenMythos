@@ -59,15 +59,16 @@
 
 ## 會切換哪些東西
 
-Claude Code 把所有個人狀態放在兩個地方，這個工具會把它們**整組**切換：
+Claude Code 的個人狀態放在下面這些地方，這個工具會把它們**整組**切換：
 
 | 位置 | 內容 |
 |---|---|
-| `~/.claude/`（Windows：`%USERPROFILE%\.claude\`） | 全域記憶 `CLAUDE.md`、`rules/`、每個專案的**自動記憶** `projects/*/memory/`、**所有對話紀錄** `projects/*.jsonl`、輸入歷史 `history.jsonl`、`settings.json`、`agents/`、`commands/`、`skills/`、`plugins/`、`agent-memory/`、`plans/`、`todos/`、`file-history/`（/rewind 用）、`backups/`、排程任務提示 `scheduled-tasks/`…… |
+| `~/.claude/`（Windows：`%USERPROFILE%\.claude\`） | 全域記憶 `CLAUDE.md`、`rules/`、每個專案的**自動記憶** `projects/*/memory/`、**所有對話紀錄** `projects/*.jsonl`、輸入歷史 `history.jsonl`、`settings.json`、`agents/`、`commands/`、`skills/`、`plugins/`、`agent-memory/`、`plans/`、`todos/`、`file-history/`（/rewind 用）、`backups/`、Desktop 本機排程任務的提示 `scheduled-tasks/`…… |
 | `~/.claude.json`（Windows：`%USERPROFILE%\.claude.json`） | 每個專案的信任設定與狀態、**MCP 伺服器**（user／local 範圍）、onboarding、帳號資訊、各種快取 |
+| **Claude Desktop 的 Code 工作階段清單**：macOS `~/Library/Application Support/Claude/claude-code-sessions/`、Windows `%APPDATA%\Claude\claude-code-sessions\`（Microsoft Store 版在 `%LOCALAPPDATA%\Packages\Claude_*\LocalCache\Roaming\Claude\`）、Linux `~/.config/Claude/claude-code-sessions/` | Desktop「Code」分頁側邊欄的工作階段紀錄，以及本機排程任務的排程。它們指向 `~/.claude/projects/` 裡的對話，所以要一起切換：切到乾淨版後，Desktop 不會再列出舊的工作階段，舊的排程任務也不會在乾淨版裡執行。 |
 
 如果有設定 `CLAUDE_CONFIG_DIR`，就改為切換那個資料夾（以及其中的 `.claude.json`）。
-舊版的 `~/.claude/.config.json` 也會一併切換。
+舊版的 `~/.claude/.config.json`，以及少見的 `~/.claude-custom-oauth.json` 等變體，也會一併切換。
 
 ### 刻意「不」切換、所有設定檔共用的東西
 
@@ -76,6 +77,7 @@ Claude Code 把所有個人狀態放在兩個地方，這個工具會把它們**
 | 登入：`~/.claude/.credentials.json`（Windows／Linux）、macOS「鑰匙圈」、Windows 認證管理員 | 讓乾淨版也維持登入；也避免舊副本的權杖過期。MCP 的 OAuth 登入和外掛密鑰也存在這裡，所以同樣共用。 |
 | `~/.claude/local/` | 舊版用 npm 安裝的 `claude` 程式本體，搬走會讓 `claude` 指令壞掉 |
 | `~/.claude/ide/`、`~/.claude/sessions/`、`~/.claude/daemon.lock` | 執行中程式的鎖定檔／標記，屬於「這台電腦現在的狀態」，不是記憶 |
+| `~/.claude/.device-keys.json`、`~/.claude/chrome/` | 這台電腦的裝置識別，以及 Claude in Chrome 擴充功能的連接程式（瀏覽器指向這個路徑） |
 | `~/.local/bin/claude`、`~/.local/share/claude/`、Homebrew／WinGet／npm 安裝 | 程式本體，本來就不在 `~/.claude` 裡，完全不碰 |
 
 ### 本來就不在這兩個位置、所以不受影響的東西
@@ -85,7 +87,8 @@ Claude Code 把所有個人狀態放在兩個地方，這個工具會把它們**
 - **專案資料夾裡的** `CLAUDE.md`、`CLAUDE.local.md`、`.claude/`、`.mcp.json`：屬於各個專案，乾淨版在那個專案裡仍會讀到它們。
 - 用 `autoMemoryDirectory` 設定把自動記憶放在別處時，那個資料夾不會被切換。
 - 環境變數 `ANTHROPIC_API_KEY`、`CLAUDE_CODE_OAUTH_TOKEN`：終端機版在任何設定檔都會用它登入。
-- Claude Desktop 自己的設定 `claude_desktop_config.json`（Desktop 的 MCP 伺服器）與它的側邊欄工作階段清單。
+- Claude Desktop 自己的登入、設定 `claude_desktop_config.json`（Desktop 的 MCP 伺服器，也會提供給 Code 分頁），以及 Cowork 的工作階段與記憶。
+- Windows 上 Desktop 的 WSL 工作階段用的是 WSL 裡的 `~/.claude`：想連它一起切換，請在 WSL 裡也執行一次這個工具。
 - 公司／組織的管理設定（managed settings）。
 - **claude.ai 網頁／App 的聊天記憶、Projects、連接器（connectors）**：存在 Anthropic 伺服器上，不在你的電腦裡。
   同一個帳號登入時，claude.ai 上啟用的技能和外掛會再同步下來；想要完全乾淨，建立設定檔時加
@@ -171,9 +174,9 @@ python3 claude_switch.py where            # 顯示各個路徑
 這是 Claude Code 本身的行為。切換時若發現有這種舊紀錄，工具會提醒你；想保留就先 `export` 備份，
 或在該設定檔的 `settings.json` 加入 `"cleanupPeriodDays": 3650`。
 
-**Claude Desktop 側邊欄還看得到舊的工作階段？** Desktop 自己保存工作階段清單，但對話內容在 `~/.claude/projects/`。
-切到乾淨版後，點舊的工作階段可能打不開；切回 original 就正常。
-Desktop 的「本機排程任務」也一樣：排程設定在 Desktop 裡，提示內容在 `~/.claude/scheduled-tasks/`。
+**Claude Desktop 側邊欄還看得到舊的工作階段？** Code 分頁的本機工作階段清單會跟著切換，
+但有少數卡片是從伺服器同步的，可能仍會出現；點開打不開是正常的，切回 original 就能用。
+Desktop 自己的登入不受影響，所以 Desktop 裡的乾淨版一樣是登入狀態。
 
 **想用不同帳號？** 登入是共用的：在任一設定檔執行 `/login` 換帳號，所有設定檔都會跟著換。
 切換時，帳號顯示資訊（`oauthAccount`）也會同步到新設定檔。
@@ -215,8 +218,12 @@ applies to the terminal CLI, the IDE extensions and the Code tab of **Claude Des
   `repair` either finishes the switch or rolls it back.
 - The tool refuses to switch while Claude Code or Claude Desktop is running, because Claude rewrites
   `~/.claude.json` and would pollute the other profile. It can quit Claude Desktop for you.
+- Claude Desktop's list of Code sessions (`<Desktop app data>/claude-code-sessions/`, which also holds the schedules
+  of local scheduled tasks) is switched together with `~/.claude`. The transcripts those records point to live in
+  `~/.claude/projects/`, so a clean profile shows no old sessions in Desktop's Code tab.
 - Login is shared by all profiles: `.credentials.json` stays in place, and the macOS Keychain and Windows
-  Credential Manager are not per-profile anyway. A clean profile is therefore still signed in.
+  Credential Manager are not per-profile anyway. A clean profile is therefore still signed in. Claude Desktop has
+  its own login and is not affected.
 - Not part of a profile: project-level `CLAUDE.md` / `.claude/`, `autoMemoryDirectory` outside `~/.claude`,
   API-key environment variables, Claude Desktop's own `claude_desktop_config.json`, managed settings, and
   anything server-side (claude.ai chat memory, connectors, synced skills/plugins). `doctor` lists what applies

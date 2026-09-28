@@ -1,0 +1,29 @@
+name: claude-switch
+
+on:
+  push:
+    paths:
+      - "tools/claude-memory-switcher/**"
+      - ".github/workflows/claude-switch.yml"
+  pull_request:
+    paths:
+      - "tools/claude-memory-switcher/**"
+      - ".github/workflows/claude-switch.yml"
+  workflow_dispatch:
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        # 3.9 is what macOS ships with the Command Line Tools
+        python: ["3.9", "3.13"]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - run: python -m pip install pytest
+      - run: python -m pytest tools/claude-memory-switcher -v -W error
