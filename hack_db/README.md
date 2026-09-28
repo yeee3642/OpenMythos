@@ -5,8 +5,8 @@
 | 案例庫 | 狀態 | 說明 |
 |---|---|---|
 | [`solana_hacks/`](../solana_hacks/README.md) | ✅ 111 起事件 | 見該資料夾 README |
-| `ethereum_hacks/` | ⏳ 已建立代碼表，案例待收集 | 需要足夠的網路搜尋額度，見下方〈重新執行研究 workflow〉 |
-| `bsc_hacks/` | ⏳ 已建立代碼表，案例待收集 | 同上 |
+| `ethereum_hacks/` | ⏳ 匯入中 | DeFiHackLabs 的 345 起以太坊攻擊事件；交易所 / 釣魚等其他類型需要網路搜尋額度 |
+| `bsc_hacks/` | ⏳ 匯入中 | DeFiHackLabs 的 371 起 BSC 攻擊事件；其他類型同上 |
 | `crypto_hacks.db` | ✅ 自動產生 | 三條鏈合併的跨鏈資料庫，主鍵為 `(chain, id)` |
 
 ## 結構
@@ -46,6 +46,24 @@ pytest tests/test_hack_db.py
 SELECT chain, year, incidents, single_chain_loss_usd FROM v_chain_yearly;
 SELECT chain, category_zh, incidents, total_loss_usd FROM v_chain_category;
 ```
+
+## 從 DeFiHackLabs 匯入 Ethereum / BSC 案例（不需網路搜尋）
+
+[DeFiHackLabs](https://github.com/SunWeb3Sec/DeFiHackLabs) 收錄了數百起 EVM 攻擊事件，每一起都附有可重現的 Foundry PoC。這條路線只需要能連到 `raw.githubusercontent.com`：
+
+```bash
+# 下載清單與 PoC、依 PoC 的 fork 設定判斷鏈別，產生 <鏈>_inputs.json
+python -m hack_db.defihacklabs /tmp/dhl
+```
+
+接著用 `hack_db/workflows/dhl_case_records.js` 產生紀錄：每個 agent 讀 10 起事件的 PoC 程式碼撰寫中文紀錄，另一個 agent 重新讀 PoC 逐筆嘗試推翻（分類、根因、損失金額、來源都要對得上）。參數範例：
+
+```json
+{"dataset": "bsc_hacks", "chainName": "BNB Smart Chain (BSC)", "singleScope": "bsc_only",
+ "inputPath": "/tmp/dhl/bsc_inputs.json", "count": 371, "part": "bsc"}
+```
+
+來源只能從每起事件的 `candidate_sources` 選（DeFiHackLabs PoC、分析文章、攻擊交易），不會出現編造的網址。損失金額：DeFiHackLabs 有寫美元金額就直接使用；只有 ETH / BNB 等代幣數量時，由 agent 以當時的大約價格估算並在 `notes` 說明。
 
 ## 重新執行研究 workflow
 

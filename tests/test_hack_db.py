@@ -4,6 +4,7 @@ import sqlite3
 
 import pytest
 
+from hack_db import defihacklabs as dhl
 from hack_db.build import (
     DATASETS,
     Dataset,
@@ -174,3 +175,56 @@ def test_merge_results_dedupes_ids_and_sorts():
     assert [r["id"] for r in merged] == ["a-2022-2", "a-2022"]
     assert "in_scope" not in merged[0]
     assert any(line.startswith("dropped b-2023") for line in log)
+
+
+# --- DeFiHackLabs importer -----------------------------------------------------------
+
+
+DHL_SAMPLE = """
+### 20260918 Likwid - missing pairDelta update in leverage=0 margin borrow
+### Lost: 74.31 BNB (reproduced to within 3 wei)
+```sh
+forge test --contracts src/test/2026-09/Likwid_exp.sol -vvv
+```
+### 20230218 - RevertFinance - Arbitrary External Call Vulnerability
+
+### Lost: ~$30k
+
+forge test --contracts ./src/test/2023-02/RevertFinance_exp.sol -vvv
+
+https://mirror.xyz/revertfinance.eth/abc
+"""
+
+
+def test_dhl_parse_entries_handles_both_formats():
+    likwid, revert = dhl.parse_entries(DHL_SAMPLE)
+    assert (likwid["date"], likwid["name"], likwid["poc"]) == (
+        "2026-09-18",
+        "Likwid",
+        "src/test/2026-09/Likwid_exp.sol",
+    )
+    assert revert["name"] == "RevertFinance"
+    assert revert["root_cause"] == "Arbitrary External Call Vulnerability"
+    assert revert["links"] == ["https://mirror.xyz/revertfinance.eth/abc"]
+
+
+def test_dhl_detect_chain_and_usd():
+    assert dhl.detect_chain('vm.createSelectFork("bsc", 123);') == "bsc"
+    assert dhl.detect_chain('vm.createSelectFork("mainnet", 1);') == "ethereum"
+    assert dhl.detect_chain("// Attack Tx : https://etherscan.io/tx/0xab") == "ethereum"
+    assert dhl.detect_chain("// https://optimistic.etherscan.io/tx/0xab") == "optimism"
+    assert dhl.parse_usd("~$30k") == 30000
+    assert dhl.parse_usd("$1.2M") == 1_200_000
+    assert dhl.parse_usd("100k USD") == 100_000
+    assert dhl.parse_usd("74.31 BNB") is None
+
+
+def test_dhl_candidate_sources_use_real_links_only():
+    entry = dhl.parse_entries(DHL_SAMPLE)[1]
+    poc = "// Attack Tx : https://etherscan.io/tx/0xdead\n// https://x.com/a/status/1"
+    sources = dhl.candidate_sources(entry, poc)
+    assert sources[0]["url"].startswith(dhl.BLOB)
+    urls = [s["url"] for s in sources]
+    assert "https://mirror.xyz/revertfinance.eth/abc" in urls
+    assert "https://x.com/a/status/1" in urls
+    assert "https://etherscan.io/tx/0xdead" in urls
