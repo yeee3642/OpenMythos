@@ -64,7 +64,8 @@ Claude Code 的個人狀態放在下面這些地方，這個工具會把它們**
 | 位置 | 內容 |
 |---|---|
 | `~/.claude/`（Windows：`%USERPROFILE%\.claude\`） | 全域記憶 `CLAUDE.md`、`rules/`、每個專案的**自動記憶** `projects/*/memory/`、**所有對話紀錄** `projects/*.jsonl`、輸入歷史 `history.jsonl`、`settings.json`、`agents/`、`commands/`、`skills/`、`plugins/`、`agent-memory/`、`plans/`、`todos/`、`file-history/`（/rewind 用）、`backups/`、Desktop 本機排程任務的提示 `scheduled-tasks/`…… |
-| `~/.claude.json`（Windows：`%USERPROFILE%\.claude.json`） | 每個專案的信任設定與狀態、**MCP 伺服器**（user／local 範圍）、onboarding、帳號資訊、各種快取 |
+| `~/.claude.json`（Windows：`%USERPROFILE%\.claude.json`）、`~/.claude.json.backup` | 每個專案的信任設定與狀態、**MCP 伺服器**（user／local 範圍）、onboarding、帳號資訊、各種快取 |
+| 家目錄的 `~/CLAUDE.md`、`~/CLAUDE.local.md` | 放在家目錄的記憶檔，對家目錄底下所有專案都有效，所以也算你的記憶 |
 | **Claude Desktop 的 Code 工作階段清單**：macOS `~/Library/Application Support/Claude/claude-code-sessions/`、Windows `%APPDATA%\Claude\claude-code-sessions\`（Microsoft Store 版在 `%LOCALAPPDATA%\Packages\Claude_*\LocalCache\Roaming\Claude\`）、Linux `~/.config/Claude/claude-code-sessions/` | Desktop「Code」分頁側邊欄的工作階段紀錄，以及本機排程任務的排程。它們指向 `~/.claude/projects/` 裡的對話，所以要一起切換：切到乾淨版後，Desktop 不會再列出舊的工作階段，舊的排程任務也不會在乾淨版裡執行。 |
 
 如果有設定 `CLAUDE_CONFIG_DIR`，就改為切換那個資料夾（以及其中的 `.claude.json`）。
@@ -129,6 +130,7 @@ python3 claude_switch.py where            # 顯示各個路徑
 | `--no-account-sync` | 乾淨設定檔不要從 claude.ai 帳號同步技能／外掛／連接器 |
 | `--store DIR` | 設定檔倉庫位置（預設 `~/.claude-profiles`，也可用環境變數 `CLAUDE_SWITCH_HOME`；必須和 `~/.claude` 在同一個磁碟） |
 | `--lang zh` / `--lang en` | 介面語言（預設依系統語言；也可設環境變數 `CLAUDE_SWITCH_LANG`） |
+| `--keep-api-settings` / `--no-api-settings` | 建立乾淨設定檔時，是否保留 API 供應商設定（`ANTHROPIC_BASE_URL`、金鑰、`apiKeyHelper`、代理伺服器；cc-switch 寫的就是這些）。沒指定時，偵測到就會問你 |
 | `-y` | 不要詢問確認 |
 
 ---
@@ -171,8 +173,11 @@ python3 claude_switch.py where            # 顯示各個路徑
 **乾淨版第一次啟動時，要我再信任資料夾？** 正常。「信任這個資料夾」的紀錄存在 `~/.claude.json`，乾淨版是全新的。
 
 **切回舊記憶後，很舊的對話不見了？** Claude Code 啟動時會自動刪除超過 `cleanupPeriodDays`（預設 30 天）的對話紀錄，
-這是 Claude Code 本身的行為。切換時若發現有這種舊紀錄，工具會提醒你；想保留就先 `export` 備份，
-或在該設定檔的 `settings.json` 加入 `"cleanupPeriodDays": 3650`。
+這是 Claude Code 本身的行為（依檔案時間計算，停放的時間也算）。切換時若發現有這種舊紀錄，工具會提醒你，
+並問你要不要把該設定檔的 `cleanupPeriodDays` 設為 3650 天來保留它們；也可以先 `export` 備份。
+
+**我用 cc-switch 或第三方 API（`ANTHROPIC_BASE_URL`）？** 建立乾淨版時工具會偵測到並問你要不要保留這些連線設定；
+不保留的話，乾淨版會改用你的 Claude 帳號登入。cc-switch 之後會把設定寫進「目前使用中」的設定檔。
 
 **Claude Desktop 側邊欄還看得到舊的工作階段？** Code 分頁的本機工作階段清單會跟著切換，
 但有少數卡片是從伺服器同步的，可能仍會出現；點開打不開是正常的，切回 original 就能用。
@@ -224,6 +229,9 @@ applies to the terminal CLI, the IDE extensions and the Code tab of **Claude Des
 - Login is shared by all profiles: `.credentials.json` stays in place, and the macOS Keychain and Windows
   Credential Manager are not per-profile anyway. A clean profile is therefore still signed in. Claude Desktop has
   its own login and is not affected.
+- `~/CLAUDE.md` / `~/CLAUDE.local.md` in the home folder (loaded for every project below it) are part of the profile.
+  API-provider settings (`ANTHROPIC_BASE_URL`, keys, `apiKeyHelper`, proxies, as written by cc-switch) can be carried
+  into a new clean profile (`--keep-api-settings`; asked interactively when detected).
 - Not part of a profile: project-level `CLAUDE.md` / `.claude/`, `autoMemoryDirectory` outside `~/.claude`,
   API-key environment variables, Claude Desktop's own `claude_desktop_config.json`, managed settings, and
   anything server-side (claude.ai chat memory, connectors, synced skills/plugins). `doctor` lists what applies

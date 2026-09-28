@@ -60,13 +60,20 @@ def isolated_env(h: Path) -> dict:
     }
 
 
+# Variables the tool reacts to; the developer's (or CI's) own values must not
+# leak into the tests.
+CLEARED_ENV = ("CLAUDE_CONFIG_DIR", "CLAUDE_SWITCH_HOME", "CLAUDE_CODE_PLUGIN_CACHE_DIR",
+               "CLAUDE_CODE_REMOTE_MEMORY_DIR", "CLAUDE_SECURESTORAGE_CONFIG_DIR", "ANTHROPIC_BASE_URL") + \
+    cs.AUTH_ENV_VARS
+
+
 @pytest.fixture
 def home(tmp_path, monkeypatch):
     h = tmp_path / "home"
     h.mkdir()
     for k, v in isolated_env(h).items():
         monkeypatch.setenv(k, v)
-    for var in ("CLAUDE_CONFIG_DIR", "CLAUDE_SWITCH_HOME"):
+    for var in CLEARED_ENV:
         monkeypatch.delenv(var, raising=False)
     cs.set_lang("en")
     return h
@@ -835,7 +842,7 @@ def test_real_cli_round_trip_in_subprocess(tmp_path):
     populate(home)
     before = live_snapshot(home)
     env = dict(os.environ, CLAUDE_SWITCH_LANG="en", PYTHONUTF8="1", **isolated_env(home))
-    for var in ("CLAUDE_CONFIG_DIR", "CLAUDE_SWITCH_HOME"):
+    for var in CLEARED_ENV:
         env.pop(var, None)
     # Real detection; on a dev machine where Claude itself is running, force.
     extra = ["--force"] if cs.scan_processes() else []
@@ -1049,6 +1056,59 @@ def test_home_backup_file_moves_with_profile(home):
     assert not (home / ".claude.json.backup").exists()
     cs.switch_to(paths, "original", opts())
     assert (home / ".claude.json.backup").read_text() == '{"mcpServers": {"old": {}}}'
+
+
+def test_home_claude_md_is_part_of_the_profile(home, tmp_path):
+    populate(home)
+    (home / "CLAUDE.md").write_text("home-level memory")
+    before = live_snapshot(home)
+    paths = P(home)
+    cs.clean(paths, opts())
+    assert not (home / "CLAUDE.md").exists()
+    z = cs.export_profile(paths, "original", out=str(tmp_path / "h.zip"))
+    with zipfile.ZipFile(z) as zf:
+        assert zf.read("home/CLAUDE.md") == b"home-level memory"
+    cs.switch_to(paths, "original", opts())
+    assert (home / "CLAUDE.md").read_text() == "home-level memory"
+    assert live_snapshot(home) == before
+
+
+def test_keep_api_settings(home):
+    populate(home)
+    (home / ".claude" / "settings.json").write_text(json.dumps({
+        "model": "opus", "permissions": {"allow": ["Bash"]}, "apiKeyHelper": "~/bin/key.sh",
+        "env": {"ANTHROPIC_BASE_URL": "https://proxy.example", "ANTHROPIC_AUTH_TOKEN": "tok", "DEBUG": "1"}}))
+    cfg = json.loads((home / ".claude.json").read_text())
+    cfg["env"] = {"HTTPS_PROXY": "http://127.0.0.1:7890"}
+    (home / ".claude.json").write_text(json.dumps(cfg))
+    paths = P(home)
+    env, top = cs.api_settings(paths)
+    assert env == {"ANTHROPIC_BASE_URL": "https://proxy.example", "ANTHROPIC_AUTH_TOKEN": "tok",
+                   "HTTPS_PROXY": "http://127.0.0.1:7890"}
+    assert top == {"apiKeyHelper": "~/bin/key.sh"}
+    cs.clean(paths, opts(), keep_api=True, no_account_sync=True)
+    new = json.loads((home / ".claude" / "settings.json").read_text())
+    assert new["env"] == env and new["apiKeyHelper"] == "~/bin/key.sh"
+    assert new["syncClaudeAiSkills"] is False
+    assert "model" not in new and "permissions" not in new
+
+
+def test_api_settings_not_kept_by_default_noninteractive(home):
+    populate(home)
+    (home / ".claude" / "settings.json").write_text('{"env": {"ANTHROPIC_BASE_URL": "https://x"}}')
+    paths = P(home)
+    cs.clean(paths, opts())
+    assert not (home / ".claude" / "settings.json").exists()
+    assert not any("ANTHROPIC_BASE_URL" in n for n in cs.doctor(paths))  # clean profile has none
+    cs.switch_to(paths, "original", opts())
+    assert any("ANTHROPIC_BASE_URL" in n for n in cs.doctor(paths))
+
+
+def test_apply_settings_merges_env(tmp_path):
+    f = tmp_path / "settings.json"
+    f.write_text('{"env": {"A": "1"}, "x": 1}')
+    cs._apply_settings(f, {"env": {"B": "2"}, "y": 2})
+    assert json.loads(f.read_text()) == {"env": {"A": "1", "B": "2"}, "x": 1, "y": 2}
 
 
 def test_messages_have_both_languages_and_matching_fields():

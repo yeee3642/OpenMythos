@@ -69,6 +69,11 @@ MANIFEST_NAME = "claude-switch-manifest.json"
 SLOT_CONFIG = "config"
 SLOT_GLOBAL = "claude.json"
 SLOT_DESKTOP = "desktop"
+SLOT_HOME = "home"
+
+# CLAUDE.md files directly in the home folder are loaded for every project
+# under it, so they are part of "your memory" as much as ~/.claude/CLAUDE.md.
+HOME_MEMORY_FILES = ("CLAUDE.md", "CLAUDE.local.md")
 
 # ~/.claude<suffix>.json: "" is the normal one; the others belong to non-default
 # sign-in environments and exist only on machines that used them.
@@ -110,6 +115,13 @@ PINNED_CHILDREN = {
     "sessions": "runtime",
     "daemon.lock": "runtime",
     ".oauth_refresh.lock": "runtime",
+    ".oauth_refresh.lock.owner": "runtime",
+    ".design_oauth_refresh.lock": "runtime",
+    "history.jsonl.lock": "runtime",
+    ".update.lock": "runtime",
+    "server.lock": "runtime",
+    "computer-use.lock": "runtime",
+    ".cc-writes": "runtime",
     # Per-machine device identity (its macOS Keychain twin is shared anyway).
     ".device-keys.json": "device",
     # Native-messaging host for the Claude in Chrome extension; the browser's
@@ -156,6 +168,17 @@ NO_ACCOUNT_SYNC_SETTINGS = {
 
 # Environment variables that authenticate Claude Code regardless of profile.
 AUTH_ENV_VARS = ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "CLAUDE_CODE_OAUTH_TOKEN")
+
+# settings.json "env" keys that point Claude Code at an API provider (what
+# cc-switch and similar tools write).  A clean profile without them may not be
+# able to connect at all, so they can be carried over on request.
+_API_ENV_PREFIXES = ("ANTHROPIC_", "CLAUDE_CODE_USE_", "AWS_", "VERTEX_", "CLOUD_ML_")
+_API_ENV_KEYS = ("API_TIMEOUT_MS", "HTTPS_PROXY", "HTTP_PROXY", "NO_PROXY", "https_proxy", "http_proxy", "no_proxy")
+_API_TOP_KEYS = ("apiKeyHelper", "awsAuthRefresh", "awsCredentialExport")
+
+
+def is_api_env_key(key: str) -> bool:
+    return key.startswith(_API_ENV_PREFIXES) or key in _API_ENV_KEYS
 
 _WIN_RESERVED = {
     "CON", "PRN", "AUX", "NUL",
@@ -422,6 +445,26 @@ MESSAGES: Dict[str, Tuple[str, str]] = {
     "doctor_keychain": (
         "macOS: your login (and MCP / plugin secrets) is in the Keychain and is shared by all profiles.",
         "macOS：登入資訊（以及 MCP／外掛的密鑰）存在「鑰匙圈」，由所有設定檔共用。",
+    ),
+    "ask_keep_api": (
+        "Your current settings route Claude Code through an API provider ({keys}). Keep these in the clean profile? "
+        "(Without them it may not be able to connect.)",
+        "你目前的設定讓 Claude Code 透過 API 供應商連線（{keys}）。要把這些保留到乾淨版嗎？（沒有它們可能會無法連線）",
+    ),
+    "api_kept": ("Kept API-provider settings in the new profile: {keys}", "已把 API 供應商設定保留到新設定檔：{keys}"),
+    "ask_keep_history": (
+        "Set cleanupPeriodDays to 3650 in this profile so Claude Code keeps those old conversations?",
+        "要在這個設定檔把 cleanupPeriodDays 設為 3650，讓 Claude Code 保留這些舊對話嗎？",
+    ),
+    "kept_history": ("Done: settings.json now has \"cleanupPeriodDays\": 3650.", "完成：settings.json 已設定 \"cleanupPeriodDays\": 3650。"),
+    "doctor_config_dir_literal": (
+        "! CLAUDE_CONFIG_DIR is {value!r}: Claude Code does not expand '~' and treats an empty value as the current "
+        "folder. Use a full path, or unset it.",
+        "! CLAUDE_CONFIG_DIR 是 {value!r}：Claude Code 不會展開「~」，空值則會被當成目前所在的資料夾。請改用完整路徑，或取消設定。",
+    ),
+    "doctor_relocated": (
+        "! {var}={dir}: that data lives outside the profile and is not switched.",
+        "! {var}={dir}：那些資料在設定檔之外，不會被切換。",
     ),
     "ask_no_account_sync": (
         "Also block skills/plugins/connectors that sync from your claude.ai account?",
@@ -825,6 +868,8 @@ class Paths:
             base / ".claude.json.lock",
             self.home / ".claude.lock",
             self.config_dir / ".oauth_refresh.lock",
+            self.config_dir / ".design_oauth_refresh.lock",
+            self.config_dir / "history.jsonl.lock",
         ]
         # Old versions kept the global config at <config dir>/.config.json.
         # Claude Code still prefers that file whenever it exists.  It lives in
@@ -881,6 +926,8 @@ class Paths:
     def unit_slots(self) -> List[Tuple[Path, Path]]:
         """Things switched as a single unit: (live path, path inside a profile)."""
         slots = list(self.global_files) + list(self.extra_files)
+        for name in HOME_MEMORY_FILES:
+            slots.append((self.home / name, Path(SLOT_HOME) / name))
         for key, d in self.desktop_app_dirs():
             slots.append((d / DESKTOP_SESSIONS, Path(SLOT_DESKTOP) / key))
         return slots
@@ -1748,7 +1795,10 @@ def switch_to(paths: Paths, target: str, opts: Options, confirm: bool = False) -
         if plan.conflict_dir:
             say(t("conflicts_moved", path=plan.conflict_dir))
         say(t("switched", old=old, new=target))
-        _retention_warning(paths)
+        if _retention_warning(paths) and opts.interactive and not opts.yes:
+            if ask_yes_no(t("ask_keep_history"), default=True):
+                _apply_settings(paths.config_dir / "settings.json", {"cleanupPeriodDays": 3650})
+                say(t("kept_history"))
         _maybe_reopen_desktop(opts)
         return state
 
@@ -1764,14 +1814,14 @@ def _cleanup_days(paths: Paths) -> Optional[float]:
     return 30.0
 
 
-def _retention_warning(paths: Paths) -> None:
+def _retention_warning(paths: Paths) -> int:
     """Claude Code deletes transcripts older than cleanupPeriodDays when it
     starts.  A profile that sat parked for a while can lose old conversations
     on its first start, so say so while there is still time to export."""
     days = _cleanup_days(paths)
     proj = paths.config_dir / "projects"
     if not days or days <= 0 or not proj.is_dir():
-        return
+        return 0
     cutoff = time.time() - days * 86400
     old = 0
     for root, _dirs, files in os.walk(_long(proj)):
@@ -1784,6 +1834,7 @@ def _retention_warning(paths: Paths) -> None:
                     pass
     if old:
         say(t("retention_warning", n=old, days=int(days)))
+    return old
 
 
 def _maybe_reopen_desktop(opts: Options) -> None:
@@ -1831,8 +1882,36 @@ def _apply_settings(settings_file: Path, values: Dict[str, Any]) -> None:
                 data = loaded
         except (OSError, ValueError):
             pass
-    data.update(values)
+    for k, v in values.items():
+        if k == "env" and isinstance(v, dict) and isinstance(data.get("env"), dict):
+            data["env"] = dict(data["env"], **v)
+        else:
+            data[k] = v
     write_json_atomic(settings_file, data)
+
+
+def api_settings(paths: Paths) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+    """(env, top-level settings) in the live profile that route Claude Code to
+    an API provider: settings.json "env" + apiKeyHelper, and the legacy "env"
+    block of ~/.claude.json."""
+    env: Dict[str, Any] = {}
+    top: Dict[str, Any] = {}
+    sources = [(paths.config_dir / "settings.json", True), (paths.effective_config(), False)]
+    for f, is_settings in sources:
+        try:
+            data = read_json(f)
+        except (OSError, ValueError):
+            continue
+        if not isinstance(data, dict):
+            continue
+        block = data.get("env")
+        if isinstance(block, dict):
+            for k, v in block.items():
+                if is_api_env_key(k) and k not in env:
+                    env[k] = v
+        if is_settings:
+            top.update({k: data[k] for k in _API_TOP_KEYS if k in data})
+    return env, top
 
 
 def _seed_global_config(paths: Paths, source: Optional[Path] = None) -> Dict[str, Any]:
@@ -1852,7 +1931,7 @@ def _seed_global_config(paths: Paths, source: Optional[Path] = None) -> Dict[str
 
 def create_profile(paths: Paths, state: Dict[str, Any], name: str, note: Optional[str] = None,
                    copy_items: Iterable[str] = (), clone_from: Optional[str] = None,
-                   no_account_sync: bool = False) -> str:
+                   no_account_sync: bool = False, keep_api: bool = False) -> str:
     """Create an inactive profile: fresh (default) or a copy of another one."""
     name = validate_name(name)
     if _name_taken(paths, state, name):
@@ -1868,7 +1947,8 @@ def create_profile(paths: Paths, state: Dict[str, Any], name: str, note: Optiona
                     copy_any(live, tmp / rel)
             else:
                 sdir = paths.profile_dir(src)
-                for rel in [SLOT_CONFIG, SLOT_DESKTOP] + [str(r) for _l, r in paths.global_files]:
+                for rel in [SLOT_CONFIG, SLOT_DESKTOP, SLOT_HOME] + \
+                        [str(r) for _l, r in paths.global_files + paths.extra_files]:
                     if lexists(sdir / rel):
                         copy_any(sdir / rel, tmp / rel)
             (tmp / SLOT_CONFIG).mkdir(exist_ok=True)
@@ -1894,6 +1974,11 @@ def create_profile(paths: Paths, state: Dict[str, Any], name: str, note: Optiona
                 copied.append(item)
             if copied:
                 say(t("copied_items", items=", ".join(copied)))
+            if keep_api:
+                env, top = api_settings(paths)
+                if env or top:
+                    _apply_settings(tmp / SLOT_CONFIG / "settings.json", dict(top, env=env) if env else top)
+                    say(t("api_kept", keys=", ".join(sorted(list(env) + list(top)))))
             if no_account_sync:
                 _apply_settings(tmp / SLOT_CONFIG / "settings.json", NO_ACCOUNT_SYNC_SETTINGS)
                 say(t("no_account_sync_done"))
@@ -1909,12 +1994,27 @@ def create_profile(paths: Paths, state: Dict[str, Any], name: str, note: Optiona
     return name
 
 
+def _decide_keep_api(paths: Paths, opts: Options, keep_api: Optional[bool]) -> bool:
+    """Carry API-provider settings into a new clean profile?  Ask when the
+    user did not say and such settings exist."""
+    if keep_api is not None:
+        return keep_api
+    env, top = api_settings(paths)
+    if not (env or top):
+        return False
+    if opts.interactive and not opts.yes:
+        return ask_yes_no(t("ask_keep_api", keys=", ".join(sorted(list(env) + list(top)))), default=True)
+    return False
+
+
 def new_profile(paths: Paths, name: str, opts: Options, copy_items: Iterable[str] = (),
-                clone_from: Optional[str] = None, switch: bool = False, no_account_sync: bool = False) -> None:
+                clone_from: Optional[str] = None, switch: bool = False, no_account_sync: bool = False,
+                keep_api: Optional[bool] = None) -> None:
+    keep = False if clone_from else _decide_keep_api(paths, opts, keep_api)
     with StoreLock(paths):
         state = ensure_state(paths)
         create_profile(paths, state, name, copy_items=copy_items, clone_from=clone_from,
-                       no_account_sync=no_account_sync)
+                       no_account_sync=no_account_sync, keep_api=keep)
         say(t("created_profile", name=name))
     if switch:
         switch_to(paths, name, opts)
@@ -1930,7 +2030,8 @@ def _dry_run_first_park(paths: Paths, target: str) -> None:
 
 
 def clean(paths: Paths, opts: Options, name: str = DEFAULT_CLEAN_NAME, old_name: str = DEFAULT_OLD_NAME,
-          reset: bool = False, copy_items: Iterable[str] = (), no_account_sync: bool = False) -> None:
+          reset: bool = False, copy_items: Iterable[str] = (), no_account_sync: bool = False,
+          keep_api: Optional[bool] = None) -> None:
     """The one-click action: save the current Claude Code, start a clean one."""
     name = validate_name(name)
     if opts.dry_run:
@@ -1945,16 +2046,21 @@ def clean(paths: Paths, opts: Options, name: str = DEFAULT_CLEAN_NAME, old_name:
             switch_to(paths, existing, opts)
         return
     _wait_for_claude_to_exit(opts)  # before creating anything
+    st = load_state(paths)
+    will_create = reset or st is None or not any(same_name(n, name) for n in st["profiles"])
+    keep = _decide_keep_api(paths, opts, keep_api) if will_create else False
     with StoreLock(paths):
         state = ensure_state(paths, old_name)
         existing = next((n for n in state["profiles"] if same_name(n, name)), None)
         if existing is None:
-            create_profile(paths, state, name, copy_items=copy_items, no_account_sync=no_account_sync)
+            create_profile(paths, state, name, copy_items=copy_items, no_account_sync=no_account_sync,
+                           keep_api=keep)
             say(t("created_profile", name=name))
             reset = False  # brand new already
         target = existing or name
     if reset:
-        reset_profile(paths, target, opts, copy_items=copy_items, no_account_sync=no_account_sync)
+        reset_profile(paths, target, opts, copy_items=copy_items, no_account_sync=no_account_sync,
+                      keep_api=keep)
     else:
         switch_to(paths, target, opts, confirm=True)
     say(t("shared_login_note"))
@@ -1965,7 +2071,7 @@ def clean(paths: Paths, opts: Options, name: str = DEFAULT_CLEAN_NAME, old_name:
 
 
 def reset_profile(paths: Paths, name: str, opts: Options, copy_items: Iterable[str] = (),
-                  no_account_sync: bool = False) -> None:
+                  no_account_sync: bool = False, keep_api: bool = False) -> None:
     """Make `name` fresh again (and active); its old contents go to the trash."""
     with StoreLock(paths):
         state = ensure_state(paths)
@@ -1983,7 +2089,7 @@ def reset_profile(paths: Paths, name: str, opts: Options, copy_items: Iterable[s
             note = state["profiles"][name].get("note") or t("note_clean")
             tmp_name = "reset-%s" % stamp()
             create_profile(paths, state, tmp_name, note=note, copy_items=copy_items,
-                           no_account_sync=no_account_sync)
+                           no_account_sync=no_account_sync, keep_api=keep_api)
             plan = plan_switch(paths, state, tmp_name, park_into=trash)
             execute_plan(paths, state, plan, op="reset")
             # The fresh profile is live now under tmp_name; give it the old name.
@@ -2004,7 +2110,7 @@ def reset_profile(paths: Paths, name: str, opts: Options, copy_items: Iterable[s
             note = state["profiles"][name].get("note")
             del state["profiles"][name]
             create_profile(paths, state, name, note=note, copy_items=copy_items,
-                           no_account_sync=no_account_sync)
+                           no_account_sync=no_account_sync, keep_api=keep_api)
         log_event(paths, "reset %s -> old contents in %s" % (name, trash))
         say(t("reset_done", name=name, path=trash))
         active = state["active"]
@@ -2124,9 +2230,12 @@ def _profile_sources(paths: Paths, state: Dict[str, Any], name: str) -> List[Tup
         for child in sorted(os.listdir(str(cfg))):
             if child not in PINNED_CHILDREN:
                 out.append((cfg / child, "%s/%s" % (SLOT_CONFIG, child)))
-    for _live, rel in paths.global_files:
+    for _live, rel in paths.global_files + paths.extra_files:
         if lexists(pdir / rel):
             out.append((pdir / rel, rel.as_posix()))
+    for name in HOME_MEMORY_FILES:
+        if lexists(pdir / SLOT_HOME / name):
+            out.append((pdir / SLOT_HOME / name, "%s/%s" % (SLOT_HOME, name)))
     ddir = pdir / SLOT_DESKTOP
     if ddir.is_dir():
         for key in sorted(os.listdir(str(ddir))):
@@ -2219,9 +2328,12 @@ def _safe_member(name: str) -> Optional[str]:
         return None
     if not parts:
         return None
-    globals_ = {"claude%s.json" % sfx for sfx in GLOBAL_SUFFIXES}
+    globals_ = {"claude%s.json" % sfx for sfx in GLOBAL_SUFFIXES} | {"claude.json.backup"}
     if parts[0] in globals_ or parts[0] == MANIFEST_NAME:
         if len(parts) != 1:
+            return None
+    elif parts[0] == SLOT_HOME:
+        if len(parts) != 2 or parts[1] not in HOME_MEMORY_FILES:
             return None
     elif parts[0] == SLOT_CONFIG:
         if len(parts) > 1 and parts[1] in PINNED_CHILDREN:
@@ -2381,9 +2493,22 @@ def doctor(paths: Paths) -> List[str]:
     for var in AUTH_ENV_VARS + ("ANTHROPIC_BASE_URL",):
         if os.environ.get(var):
             notes.append(t("doctor_auth_env", var=var))
-    provider = [v for v in AUTH_ENV_VARS + ("ANTHROPIC_BASE_URL", "ANTHROPIC_MODEL") if env.get(v)]
-    if provider:
-        notes.append(t("doctor_settings_provider", vars=", ".join(provider)))
+    api_env, api_top = api_settings(paths)
+    if api_env or api_top:
+        notes.append(t("doctor_settings_provider", vars=", ".join(sorted(list(api_env) + list(api_top)))))
+    try:
+        gcfg = read_json(paths.effective_config())
+    except (OSError, ValueError):
+        gcfg = {}
+    genv = gcfg.get("env") if isinstance(gcfg, dict) and isinstance(gcfg.get("env"), dict) else {}
+    if genv.get("CLAUDE_CONFIG_DIR"):
+        notes.append(t("doctor_settings_config_dir", dir=genv["CLAUDE_CONFIG_DIR"]))
+    raw = os.environ.get("CLAUDE_CONFIG_DIR")
+    if raw is not None and (raw.strip() == "" or raw.strip().startswith("~")):
+        notes.append(t("doctor_config_dir_literal", value=raw))
+    for var in ("CLAUDE_CODE_REMOTE_MEMORY_DIR", "CLAUDE_SECURESTORAGE_CONFIG_DIR"):
+        if os.environ.get(var):
+            notes.append(t("doctor_relocated", var=var, dir=os.environ[var]))
     if os.environ.get("CLAUDE_CODE_PLUGIN_CACHE_DIR"):
         notes.append(t("doctor_plugin_dir", dir=os.environ["CLAUDE_CODE_PLUGIN_CACHE_DIR"]))
     if (paths.home / ".cc-switch").exists():
@@ -2625,6 +2750,10 @@ def build_parser() -> argparse.ArgumentParser:
                    help="copy an item of ~/.claude into the clean profile, e.g. settings.json (repeatable)")
     s.add_argument("--no-account-sync", action="store_true",
                    help="also stop skills/plugins/connectors from claude.ai syncing into the clean profile")
+    s.add_argument("--keep-api-settings", dest="keep_api", action="store_const", const=True, default=None,
+                   help="carry API-provider settings (ANTHROPIC_BASE_URL, keys, proxy...) into it")
+    s.add_argument("--no-api-settings", dest="keep_api", action="store_const", const=False,
+                   help="do not carry API-provider settings (and do not ask)")
     s = sub.add_parser("switch", aliases=["use"], parents=[common], help="switch to a profile")
     s.add_argument("name")
     sub.add_parser("toggle", parents=[common], help="switch to the previous profile")
@@ -2635,6 +2764,10 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--switch", action="store_true", help="switch to it right away")
     s.add_argument("--no-account-sync", action="store_true",
                    help="stop skills/plugins/connectors from claude.ai syncing into it")
+    s.add_argument("--keep-api-settings", dest="keep_api", action="store_const", const=True, default=None,
+                   help="carry API-provider settings (ANTHROPIC_BASE_URL, keys, proxy...) into it")
+    s.add_argument("--no-api-settings", dest="keep_api", action="store_const", const=False,
+                   help="do not carry API-provider settings (and do not ask)")
     s = sub.add_parser("clone", parents=[common], help="duplicate a profile")
     s.add_argument("source")
     s.add_argument("name")
@@ -2706,14 +2839,14 @@ def main(argv: Optional[List[str]] = None, proc_finder: Optional[Callable[[], Li
                     say(t("initialized", name=args.name))
         elif cmd == "clean":
             clean(paths, opts, name=args.name, old_name=args.old_name, reset=args.reset, copy_items=args.copy,
-                  no_account_sync=args.no_account_sync)
+                  no_account_sync=args.no_account_sync, keep_api=args.keep_api)
         elif cmd in ("switch", "use"):
             switch_to(paths, args.name, opts)
         elif cmd == "toggle":
             toggle(paths, opts)
         elif cmd == "new":
             new_profile(paths, args.name, opts, copy_items=args.copy, switch=args.switch,
-                        no_account_sync=args.no_account_sync)
+                        no_account_sync=args.no_account_sync, keep_api=args.keep_api)
         elif cmd == "clone":
             new_profile(paths, args.name, opts, clone_from=args.source)
         elif cmd == "reset":
