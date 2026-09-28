@@ -8,3 +8,5 @@ crypto_verification,密碼學驗證缺陷,3,0.0,"SIMD-0376 (proposed ed25519 sig
 input_handling_dos,輸入處理不當（節點崩潰 / 阻斷服務）,3,0.0,Solana (Agave and Jito-Solana validator clients)、Agave / Jito validator clients (gossip and vote processing)、Quinn QUIC library (quinn-proto) used by Agave validators,對所有外部輸入做完整的格式與邊界檢查，避免 unwrap() 或 panic；持續進行模糊測試；維持多個驗證節點客戶端（Agave、Firedancer），降低單一實作漏洞的衝擊。
 arithmetic,數值計算錯誤（捨入 / 溢位）,2,0.0,"Solana rBPF (eBPF VM / ELF loader)、SPL Token Lending program (Solana Program Library) and forks (Solend, Tulip, Larix, etc.)",使用 checked_add、checked_mul 等 checked 運算；依操作方向明確選擇 floor / ceil，讓捨入永遠對協議有利；release 版本也啟用 overflow-checks。
 control_flow,控制流程錯誤,1,0.0,Jet Protocol,迴圈中遇到特殊值應使用 continue 或 filter，而非 break / take_while；為空帳戶、預設 Pubkey 等邊界情況撰寫測試並進行模糊測試（fuzzing）。
+consensus_state_bug,共識 / 狀態處理錯誤,0,0,,對分叉選擇、重複區塊與快取邏輯做形式化分析與壓力測試；多客戶端實作交叉驗證；準備快速協調重啟與修補的流程。
+resource_exhaustion,資源耗盡（交易洪水 / 缺乏流量控管）,0,0,,協議層採用優先費市場、依質押加權的 QoS 與 QUIC 流量控管；應用層避免「先搶先贏」的鑄造設計，並對失敗交易收取費用（例如 Metaplex 的 bot tax）。
