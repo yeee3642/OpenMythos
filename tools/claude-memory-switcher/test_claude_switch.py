@@ -38,8 +38,11 @@ def snapshot(root: Path) -> dict:
 
 
 def live_snapshot(home: Path) -> dict:
+    """Everything a profile consists of, minus the tool's own marker file."""
+    claude = snapshot(home / ".claude")
+    claude.pop(cs.MARKER_FILE, None)
     return {
-        "claude": snapshot(home / ".claude"),
+        "claude": claude,
         "claude.json": snapshot(home / ".claude.json"),
         "desktop": snapshot(desktop_sessions(home)),
     }
@@ -314,7 +317,7 @@ def test_failure_mid_switch_rolls_back(home, monkeypatch):
 
 
 @pytest.mark.parametrize("direction", ["forward", "back"])
-@pytest.mark.parametrize("crash_at", list(range(12)))
+@pytest.mark.parametrize("crash_at", list(range(13)))
 def test_repair_after_hard_crash(home, monkeypatch, direction, crash_at):
     populate(home)
     before = live_snapshot(home)
@@ -329,9 +332,7 @@ def test_repair_after_hard_crash(home, monkeypatch, direction, crash_at):
     assert live_snapshot(home) == before
     state = cs.load_state(paths)
     plan = cs.plan_switch(paths, state, "clean")
-    assert len(plan.moves) == 11  # 8 parked + 3 brought back
-    if crash_at >= len(plan.moves):
-        pytest.skip("crash point beyond plan")
+    assert len(plan.moves) == 13  # 9 parked + 4 brought back (incl. the marker)
 
     def boom(i):
         if i == crash_at:
@@ -366,7 +367,7 @@ def test_repair_after_hard_crash(home, monkeypatch, direction, crash_at):
     assert not (paths.store / cs.CONFLICTS_DIR).exists()
 
 
-@pytest.mark.parametrize("fail_at", list(range(1, 12)))
+@pytest.mark.parametrize("fail_at", list(range(1, 14)))
 def test_rollback_at_every_step(home, monkeypatch, fail_at):
     """An error at any move leaves both profiles exactly as they were."""
     populate(home)
@@ -378,7 +379,7 @@ def test_rollback_at_every_step(home, monkeypatch, fail_at):
     cs.switch_to(paths, "original", opts())
     orig_live = live_snapshot(home)
     stored_clean = snapshot(paths.profile_dir("clean"))
-    assert len(cs.plan_switch(paths, cs.load_state(paths), "clean").moves) == 11
+    assert len(cs.plan_switch(paths, cs.load_state(paths), "clean").moves) == 13
     real_move = cs.move
     calls = {"n": 0}
 
@@ -496,10 +497,12 @@ def test_claude_config_dir_env(home, monkeypatch, tmp_path):
     assert paths.global_config == cfg / ".claude.json"
     before = snapshot(cfg)
     cs.clean(paths, opts())
-    assert sorted(os.listdir(cfg)) == [".claude.json"]
+    assert sorted(os.listdir(cfg)) == [".claude-switch.json", ".claude.json"]
     assert json.loads((cfg / ".claude.json").read_text()) == {"hasCompletedOnboarding": True}
     cs.switch_to(paths, "original", opts())
-    assert snapshot(cfg) == before
+    after = snapshot(cfg)
+    after.pop(cs.MARKER_FILE)
+    assert after == before
 
 
 # --------------------------------------------------------------------------
@@ -959,6 +962,90 @@ def test_export_import_includes_desktop_sessions(home, tmp_path):
         assert not any("device-keys" in n or n.startswith("config/chrome") for n in zf.namelist())
     cs.import_profile(paths, str(z), "copy")
     assert (paths.profile_dir("copy") / "desktop" / key / "acct" / "org" / "local_1.json").exists()
+
+
+def test_marker_detects_a_second_store(home, tmp_path):
+    populate(home)
+    cs.clean(P(home), opts())
+    other = cs.Paths(store=str(tmp_path / "other-store"))
+    with pytest.raises(cs.SwitchError) as ei:
+        cs.clean(other, opts())  # init must refuse: ~/.claude belongs to the first store
+    assert "another" in str(ei.value)
+
+
+def test_marker_mismatch_refuses_switch(home):
+    populate(home)
+    paths = P(home)
+    cs.clean(paths, opts())
+    m = json.loads((home / ".claude" / cs.MARKER_FILE).read_text())
+    m["id"] = "somebody-else"
+    (home / ".claude" / cs.MARKER_FILE).write_text(json.dumps(m))
+    with pytest.raises(cs.SwitchError):
+        cs.switch_to(paths, "original", opts())
+    cs.switch_to(paths, "original", opts(force=True))
+    assert json.loads((home / ".claude" / cs.MARKER_FILE).read_text())["profile"] == "original"
+
+
+def test_rename_keeps_marker_in_sync(home):
+    populate(home)
+    paths = P(home)
+    cs.clean(paths, opts())
+    cs.rename_profile(paths, "clean", "乾淨版")
+    cs.switch_to(paths, "original", opts())  # would refuse if the marker were stale
+    cs.switch_to(paths, "乾淨版", opts())
+
+
+def test_nfd_name_finds_nfc_profile(home):
+    import unicodedata
+
+    paths = P(home)
+    cs.new_profile(paths, "café", opts())
+    nfd = unicodedata.normalize("NFD", "café")
+    assert cs._find_profile(cs.load_state(paths), nfd) == "café"
+    with pytest.raises(cs.SwitchError):
+        cs.new_profile(paths, nfd.upper(), opts())
+
+
+def test_fresh_lock_dir_counts_as_running(home):
+    paths = P(home)
+    lock = home / ".claude.json.lock"
+    lock.mkdir()
+    assert [p.kind for p in cs.lock_holders(paths)] == ["lock"]
+    os.utime(lock, (1_000_000_000, 1_000_000_000))  # stale
+    assert cs.lock_holders(paths) == []
+
+
+def test_sigterm_mid_switch_rolls_back(home, monkeypatch):
+    if os.name == "nt":
+        pytest.skip("POSIX signals")
+    import signal
+
+    populate(home)
+    before = live_snapshot(home)
+    paths = P(home)
+
+    def boom(i):
+        if i == 3:
+            os.kill(os.getpid(), signal.SIGTERM)
+
+    cs.init_state(paths)
+    cs.create_profile(paths, cs.load_state(paths), "clean")
+    state = cs.load_state(paths)
+    with pytest.raises(KeyboardInterrupt):
+        cs.execute_plan(paths, state, cs.plan_switch(paths, state, "clean"), fail_hook=boom)
+    assert live_snapshot(home) == before
+    assert cs.load_state(paths)["journal"] is None
+    assert signal.getsignal(signal.SIGTERM) == signal.SIG_DFL  # restored
+
+
+def test_home_backup_file_moves_with_profile(home):
+    populate(home)
+    (home / ".claude.json.backup").write_text('{"mcpServers": {"old": {}}}')
+    paths = P(home)
+    cs.clean(paths, opts())
+    assert not (home / ".claude.json.backup").exists()
+    cs.switch_to(paths, "original", opts())
+    assert (home / ".claude.json.backup").read_text() == '{"mcpServers": {"old": {}}}'
 
 
 def test_messages_have_both_languages_and_matching_fields():

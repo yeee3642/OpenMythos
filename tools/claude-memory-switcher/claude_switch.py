@@ -38,10 +38,13 @@ import locale
 import os
 import re
 import shutil
+import signal
 import stat
 import subprocess
 import sys
 import time
+import unicodedata
+import uuid
 import zipfile
 from pathlib import Path
 from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
@@ -71,6 +74,14 @@ SLOT_DESKTOP = "desktop"
 # sign-in environments and exist only on machines that used them.
 GLOBAL_SUFFIXES = ("", "-custom-oauth", "-staging-oauth", "-local-oauth")
 
+# Written into the live config dir: which profile it belongs to.  It moves
+# with the profile, so a mismatch means something else changed ~/.claude.
+MARKER_FILE = ".claude-switch.json"
+
+# Lock directories Claude Code holds (and touches every few seconds) while it
+# writes its config or refreshes the login.  A fresh one means "running".
+LOCK_DIRS_FRESH_SECONDS = 30
+
 # Claude Desktop keeps its Code-tab session records (and the schedule of its
 # local scheduled tasks) here, inside its app-data folder.  The transcripts
 # they point to live in ~/.claude/projects, so the two are switched together.
@@ -89,6 +100,8 @@ PINNED_CHILDREN = {
     # Legacy "local" npm install of the claude binary (claude migrate-installer).
     # Moving it would break the `claude` command itself.
     "local": "install",
+    # Where the Windows installer stages a new claude binary.
+    "downloads": "install",
     # Lock files written by running IDE extensions (VS Code, JetBrains);
     # runtime state, not memory.
     "ide": "runtime",
@@ -96,6 +109,7 @@ PINNED_CHILDREN = {
     # supervisor's lock.  They describe this machine right now, not a profile.
     "sessions": "runtime",
     "daemon.lock": "runtime",
+    ".oauth_refresh.lock": "runtime",
     # Per-machine device identity (its macOS Keychain twin is shared anyway).
     ".device-keys.json": "device",
     # Native-messaging host for the Claude in Chrome extension; the browser's
@@ -224,6 +238,31 @@ MESSAGES: Dict[str, Tuple[str, str]] = {
     "proc_desktop": ("Claude Desktop", "Claude Desktop"),
     "proc_cli": ("Claude Code", "Claude Code"),
     "proc_unknown": ("Claude (unknown kind)", "Claude（無法判斷類型）"),
+    "proc_lock": ("Claude is writing its files right now (lock in use)", "Claude 正在寫入它的檔案（鎖定中）"),
+    "started_inside_claude": (
+        "This switcher was started from inside Claude (pid {pid}). Close Claude and run it from a normal terminal, "
+        "or double-click the launcher, instead.",
+        "這個切換器是從 Claude 裡面啟動的（pid {pid}）。請關閉 Claude，改從一般終端機執行，或直接雙擊啟動檔。",
+    ),
+    "marker_mismatch": (
+        "The live Claude config belongs to profile '{profile}' of the store {store}, but this store ({our_store}) "
+        "thinks '{active}' is live. Something else changed ~/.claude (another store, a restored backup?). "
+        "Refusing to switch; check the paths, or pass --force.",
+        "目前的 Claude 設定屬於倉庫 {store} 的設定檔「{profile}」，但這個倉庫（{our_store}）認為使用中的是「{active}」。"
+        "可能有別的東西改過 ~/.claude（另一個倉庫、從備份還原？）。為安全起見不切換；請確認路徑，或加上 --force。",
+    ),
+    "other_store": (
+        "~/.claude is already managed by another claude-switch store at {store}. Use --store {store}.",
+        "~/.claude 已經由另一個 claude-switch 倉庫管理：{store}。請加上 --store {store}。",
+    ),
+    "store_python": (
+        "This is the Microsoft Store Python, which hides folders it creates under AppData from other apps, "
+        "so Claude Desktop would lose its session list. Install Python from https://www.python.org/downloads/ "
+        "and run this again (the .bat launcher prefers it automatically).",
+        "這是 Microsoft Store 版的 Python，它會把在 AppData 底下建立的資料夾藏起來，其他程式看不到，"
+        "Claude Desktop 會因此找不到工作階段清單。請從 https://www.python.org/downloads/ 安裝 Python 後再執行"
+        "（.bat 啟動檔會自動優先使用它）。",
+    ),
     "ask_quit_desktop": ("Quit Claude Desktop now?", "要現在幫你關閉 Claude Desktop 嗎？"),
     "quitting_desktop": ("Asking Claude Desktop to quit...", "正在關閉 Claude Desktop…"),
     "desktop_still_running": ("Claude Desktop is still running; quit it from its menu / tray icon.",
@@ -347,12 +386,30 @@ MESSAGES: Dict[str, Tuple[str, str]] = {
         "! settings.json 設定了 CLAUDE_CONFIG_DIR={dir}；Claude Code 會改用那個資料夾，而不是被切換的這個。",
     ),
     "doctor_auth_env": (
-        "! {var} is set: the terminal CLI signs in with it in every profile.",
-        "! 已設定 {var}：終端機版 CLI 在每個設定檔都會用它登入。",
+        "! {var} is set in this shell: the terminal CLI uses it in every profile.",
+        "! 這個終端機設定了 {var}：終端機版 CLI 在每個設定檔都會使用它。",
     ),
     "doctor_desktop_mcp": (
         "Claude Desktop has its own MCP servers in {file}; they are not part of a profile.",
         "Claude Desktop 在 {file} 有自己的 MCP 伺服器設定，它不屬於設定檔。",
+    ),
+    "doctor_settings_provider": (
+        "! This profile's settings.json sets {vars} (an API provider / key). A new clean profile will not have it; "
+        "create it with --copy settings.json to keep it.",
+        "! 這個設定檔的 settings.json 設定了 {vars}（API 供應商／金鑰）。新的乾淨設定檔不會有這些；"
+        "想保留的話，建立時加上 --copy settings.json。",
+    ),
+    "doctor_plugin_dir": (
+        "! CLAUDE_CODE_PLUGIN_CACHE_DIR={dir}: plugins are stored there and are not switched.",
+        "! CLAUDE_CODE_PLUGIN_CACHE_DIR={dir}：外掛存在那裡，不會被切換。",
+    ),
+    "doctor_cc_switch": (
+        "cc-switch is installed: it writes its provider settings into whichever profile is active.",
+        "偵測到 cc-switch：它會把供應商設定寫進「目前使用中」的設定檔。",
+    ),
+    "doctor_anthropic_profiles": (
+        "Anthropic profiles in {dir} can also sign Claude Code in, in every profile.",
+        "{dir} 裡的 Anthropic 設定也可能讓 Claude Code 登入，對所有設定檔都有效。",
     ),
     "doctor_desktop_login": (
         "Claude Desktop signs in on its own; switching profiles does not change its account.",
@@ -453,6 +510,14 @@ class ClaudeRunning(SwitchError):
         lines = [t("claude_running")]
         lines += ["  - " + p.describe() for p in procs]
         lines.append(t("claude_running_hint"))
+        if any(p.pid > 0 for p in procs):
+            try:
+                ancestors = set(ancestor_pids())
+            except Exception:
+                ancestors = set()
+            inside = [p for p in procs if p.pid in ancestors]
+            if inside:
+                lines.append(t("started_inside_claude", pid=inside[0].pid))
         super().__init__("\n".join(lines))
 
 
@@ -579,18 +644,61 @@ def copy_any(src: Path, dst: Path) -> None:
         shutil.copy2(_long(src), _long(dst))
 
 
+_NOREPLACE: Dict[str, Any] = {}
+
+
+def _rename_noreplace(src: str, dst: str) -> None:
+    """rename(2) that fails instead of replacing an existing destination.
+
+    Plain POSIX rename() silently replaces an existing file, or an existing
+    *empty* directory.  Linux has renameat2(RENAME_NOREPLACE) and macOS has
+    renamex_np(RENAME_EXCL); use them when available.  Windows os.rename never
+    replaces.  Everywhere else the caller's lexists() check right before is
+    the guard."""
+    if IS_WINDOWS:
+        os.rename(src, dst)
+        return
+    if "fn" not in _NOREPLACE:
+        _NOREPLACE["fn"] = None
+        try:
+            import ctypes
+
+            libc = ctypes.CDLL(None, use_errno=True)
+            if IS_MAC and hasattr(libc, "renamex_np"):
+                f = libc.renamex_np
+                f.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_uint]
+                _NOREPLACE["fn"] = lambda a, b: f(a, b, 0x00000004)  # RENAME_EXCL
+            elif sys.platform.startswith("linux") and hasattr(libc, "renameat2"):
+                f = libc.renameat2
+                f.argtypes = [ctypes.c_int, ctypes.c_char_p, ctypes.c_int, ctypes.c_char_p, ctypes.c_uint]
+                _NOREPLACE["fn"] = lambda a, b: f(-100, a, -100, b, 1)  # AT_FDCWD, RENAME_NOREPLACE
+            _NOREPLACE["ctypes"] = ctypes
+        except Exception:
+            _NOREPLACE["fn"] = None
+    fn = _NOREPLACE["fn"]
+    if fn is not None:
+        if fn(os.fsencode(src), os.fsencode(dst)) == 0:
+            return
+        err = _NOREPLACE["ctypes"].get_errno()
+        if err not in (errno.EINVAL, errno.ENOSYS, errno.ENOTSUP, getattr(errno, "EOPNOTSUPP", -1)):
+            raise OSError(err, os.strerror(err), src, None, dst)
+        # the filesystem does not support it: fall through
+    os.rename(src, dst)
+
+
 def _rename_with_retry(src: Path, dst: Path) -> None:
-    """os.rename, retried briefly on Windows where antivirus / indexers can
-    hold a file open for a moment (ERROR_ACCESS_DENIED / SHARING_VIOLATION)."""
-    attempts = 5 if IS_WINDOWS else 1
+    """Rename, retried on Windows where antivirus and the search indexer open
+    freshly written files for a moment (ACCESS_DENIED 5, SHARING_VIOLATION 32,
+    LOCK_VIOLATION 33)."""
+    attempts = 10 if IS_WINDOWS else 1
     for i in range(attempts):
         try:
-            os.rename(str(src), str(dst))
+            _rename_noreplace(str(src), str(dst))
             return
         except PermissionError as e:
-            if i == attempts - 1 or getattr(e, "winerror", None) not in (5, 32):
+            if i == attempts - 1 or getattr(e, "winerror", None) not in (5, 32, 33):
                 raise
-            time.sleep(0.4 * (i + 1))
+            time.sleep(min(0.05 * (2 ** i), 1.0))
 
 
 def move(src: Path, dst: Path) -> None:
@@ -617,14 +725,15 @@ def write_json_atomic(path: Path, data: Any, mode: Optional[int] = None) -> None
             os.chmod(str(tmp), mode)
         except OSError:
             pass
-    for i in range(5 if IS_WINDOWS else 1):
+    attempts = 10 if IS_WINDOWS else 1
+    for i in range(attempts):
         try:
             os.replace(str(tmp), str(path))
             return
-        except PermissionError:
-            if i == (4 if IS_WINDOWS else 0):
+        except PermissionError as e:
+            if i == attempts - 1 or getattr(e, "winerror", None) not in (5, 32, 33):
                 raise
-            time.sleep(0.3 * (i + 1))
+            time.sleep(min(0.05 * (2 ** i), 1.0))
 
 
 def read_json(path: Path) -> Any:
@@ -654,8 +763,17 @@ def same_device(a: Path, b: Path) -> bool:
     return da is None or db is None or da == db
 
 
+def same_name(a: str, b: str) -> bool:
+    """Profile names compare like folder names on macOS/Windows disks."""
+    return norm_name(a).casefold() == norm_name(b).casefold()
+
+
+def norm_name(name: str) -> str:
+    return unicodedata.normalize("NFC", name or "")
+
+
 def validate_name(name: str) -> str:
-    name = (name or "").strip()
+    name = norm_name(name).strip()
     ok = (
         0 < len(name) <= 64
         and not name.startswith((".", "_"))
@@ -698,6 +816,16 @@ class Paths:
             (base / (".claude%s.json" % sfx), Path("claude%s.json" % sfx)) for sfx in GLOBAL_SUFFIXES
         ]
         self.global_config = self.global_files[0][0]
+        # Written next to ~/.claude.json by Claude Desktop; holds the old account,
+        # MCP servers and project list, so it belongs to the profile too.
+        self.extra_files: List[Tuple[Path, Path]] = [
+            (base / ".claude.json.backup", Path("claude.json.backup")),
+        ]
+        self.lock_dirs = [
+            base / ".claude.json.lock",
+            self.home / ".claude.lock",
+            self.config_dir / ".oauth_refresh.lock",
+        ]
         # Old versions kept the global config at <config dir>/.config.json.
         # Claude Code still prefers that file whenever it exists.  It lives in
         # the config dir, so it is switched along with everything else there.
@@ -752,7 +880,7 @@ class Paths:
 
     def unit_slots(self) -> List[Tuple[Path, Path]]:
         """Things switched as a single unit: (live path, path inside a profile)."""
-        slots = list(self.global_files)
+        slots = list(self.global_files) + list(self.extra_files)
         for key, d in self.desktop_app_dirs():
             slots.append((d / DESKTOP_SESSIONS, Path(SLOT_DESKTOP) / key))
         return slots
@@ -770,6 +898,8 @@ class Proc:
         self.pid, self.kind, self.name, self.exe = pid, kind, name, exe
 
     def describe(self) -> str:
+        if self.kind == "lock":
+            return "%s: %s" % (t("proc_lock"), self.exe)
         label = {"desktop": t("proc_desktop"), "cli": t("proc_cli")}.get(self.kind, t("proc_unknown"))
         return "%s (pid %d) %s" % (label, self.pid, self.exe or self.name)
 
@@ -937,12 +1067,53 @@ def session_processes(config_dir: Path) -> List[Proc]:
     return procs
 
 
-def find_claude_processes(config_dir: Optional[Path] = None) -> List[Proc]:
+def lock_holders(paths: "Paths") -> List[Proc]:
+    """Claude Code's lock directories, when something touched them just now."""
+    out = []
+    now = time.time()
+    for d in paths.lock_dirs:
+        try:
+            age = now - os.stat(str(d)).st_mtime
+        except OSError:
+            continue
+        if age < LOCK_DIRS_FRESH_SECONDS:
+            out.append(Proc(0, "lock", d.name, str(d)))
+    return out
+
+
+def find_claude_processes(paths: Optional["Paths"] = None) -> List[Proc]:
     """Best-effort list of running Claude Code / Claude Desktop processes."""
     procs = scan_processes()
     if procs is None:
-        procs = session_processes(config_dir) if config_dir else []
+        procs = session_processes(paths.config_dir) if paths else []
+    if paths:
+        procs += lock_holders(paths)
     return procs
+
+
+def ancestor_pids() -> List[int]:
+    """PIDs of this process's parents, grandparents, ..."""
+    parents: Dict[int, int] = {}
+    if IS_WINDOWS:
+        out = _run(["powershell", "-NoProfile", "-NonInteractive", "-Command",
+                    "Get-CimInstance Win32_Process | Select-Object ProcessId,ParentProcessId | "
+                    "ConvertTo-Json -Compress"], timeout=30)
+        try:
+            data = json.loads(out or "[]")
+            for d in data if isinstance(data, list) else [data]:
+                parents[int(d.get("ProcessId") or 0)] = int(d.get("ParentProcessId") or 0)
+        except (ValueError, TypeError, AttributeError):
+            return []
+    else:
+        for line in (_run(["ps", "-A", "-o", "pid=", "-o", "ppid="]) or "").splitlines():
+            parts = line.split()
+            if len(parts) == 2 and parts[0].isdigit() and parts[1].isdigit():
+                parents[int(parts[0])] = int(parts[1])
+    chain, pid = [], os.getpid()
+    while pid in parents and parents[pid] not in chain and parents[pid] > 1 and len(chain) < 64:
+        pid = parents[pid]
+        chain.append(pid)
+    return chain
 
 
 def scan_processes() -> Optional[List[Proc]]:
@@ -1074,6 +1245,8 @@ def load_state(paths: Paths) -> Optional[Dict[str, Any]]:
     state.setdefault("profiles", {})
     state.setdefault("journal", None)
     state.setdefault("previous", None)
+    for pname, meta in state["profiles"].items():
+        meta.setdefault("id", "name:" + pname)  # stable until the next save stores it
     _reconcile(paths, state)
     return state
 
@@ -1083,8 +1256,10 @@ def _reconcile(paths: Paths, state: Dict[str, Any]) -> None:
     if not paths.profiles_dir.is_dir():
         return
     for d in sorted(paths.profiles_dir.iterdir()):
-        if d.is_dir() and d.name not in state["profiles"] and not d.name.startswith((".", "_")):
-            state["profiles"][d.name] = {"created": now_iso(), "note": "", "last_used": None}
+        if d.is_dir() and not d.name.startswith((".", "_")) and \
+                not any(same_name(d.name, n) for n in state["profiles"]):
+            state["profiles"][d.name] = {"created": now_iso(), "note": "", "last_used": None,
+                                         "id": uuid.uuid4().hex}
 
 
 def save_state(paths: Paths, state: Dict[str, Any]) -> None:
@@ -1109,6 +1284,10 @@ def log_event(paths: Paths, text: str) -> None:
 def init_state(paths: Paths, name: str = DEFAULT_OLD_NAME, note: Optional[str] = None) -> Dict[str, Any]:
     name = validate_name(name)
     _check_store_location(paths)
+    m = read_marker(paths)
+    if m and os.path.normcase(str(m.get("store") or "")) != os.path.normcase(str(paths.store)) \
+            and Path(str(m.get("store"))).joinpath(STATE_FILE).exists():
+        raise SwitchError(t("other_store", store=m.get("store")))
     state = {
         "format": STATE_FORMAT,
         "tool": "claude-switch",
@@ -1117,7 +1296,7 @@ def init_state(paths: Paths, name: str = DEFAULT_OLD_NAME, note: Optional[str] =
         "live": paths.live_signature(),
         "journal": None,
         "profiles": {name: {"created": now_iso(), "note": note if note is not None else t("note_original"),
-                            "last_used": now_iso()}},
+                            "last_used": now_iso(), "id": uuid.uuid4().hex}},
     }
     paths.profile_dir(name).mkdir(parents=True, exist_ok=True)
     try:
@@ -1125,8 +1304,17 @@ def init_state(paths: Paths, name: str = DEFAULT_OLD_NAME, note: Optional[str] =
     except OSError:
         pass
     save_state(paths, state)
+    if paths.config_dir.is_dir() or lexists(paths.global_config):
+        write_marker(paths, state)
     log_event(paths, "init active=%s config_dir=%s global=%s" % (name, paths.config_dir, paths.global_config))
     return state
+
+
+def is_store_python() -> bool:
+    """Microsoft Store Python redirects folders it creates under AppData into
+    its own private cache, where Claude Desktop would never see them."""
+    where_ = (sys.executable + "|" + getattr(sys, "base_exec_prefix", "")).lower()
+    return "pythonsoftwarefoundation.python" in where_ or "\\windowsapps\\" in where_
 
 
 def _check_store_location(paths: Paths) -> None:
@@ -1145,13 +1333,13 @@ def _find_profile(state: Dict[str, Any], name: str) -> str:
     if name in state["profiles"]:
         return name
     for n in state["profiles"]:
-        if n.lower() == name.lower():
+        if same_name(n, name):
             return n
     raise SwitchError(t("no_such_profile", name=name))
 
 
 def _name_taken(paths: Paths, state: Dict[str, Any], name: str) -> bool:
-    if any(n.lower() == name.lower() for n in state["profiles"]):
+    if any(same_name(n, name) for n in state["profiles"]):
         return True
     return lexists(paths.profile_dir(name))
 
@@ -1251,6 +1439,52 @@ def _journal_moves(j: Dict[str, Any]) -> List[Tuple[Path, Path]]:
     return [(Path(s), Path(d)) for s, d in j["moves"]]
 
 
+class _Signals:
+    """While moving files, turn SIGTERM / SIGHUP (e.g. the terminal or a parent
+    Claude process going away) into an exception so the switch is rolled
+    back instead of stopping half-way; while rolling back, ignore them."""
+
+    SIGS = tuple(getattr(signal, n) for n in ("SIGTERM", "SIGHUP") if hasattr(signal, n))
+
+    def __init__(self) -> None:
+        self.saved: Dict[int, Any] = {}
+
+    def _usable(self) -> bool:
+        import threading
+
+        return not IS_WINDOWS and threading.current_thread() is threading.main_thread()
+
+    def _handler(self, signum: int, _frame: Any) -> None:
+        raise KeyboardInterrupt("signal %d" % signum)
+
+    def __enter__(self) -> "_Signals":
+        if self._usable():
+            for sig in self.SIGS:
+                try:
+                    self.saved[sig] = signal.signal(sig, self._handler)
+                except (OSError, ValueError):
+                    pass
+        return self
+
+    def hold(self) -> None:
+        """Ignore signals (including Ctrl-C) until __exit__."""
+        if not self._usable():
+            return
+        for sig in self.SIGS + (signal.SIGINT,):
+            try:
+                old = signal.signal(sig, signal.SIG_IGN)
+                self.saved.setdefault(sig, old)
+            except (OSError, ValueError):
+                pass
+
+    def __exit__(self, *exc: Any) -> None:
+        for sig, old in self.saved.items():
+            try:
+                signal.signal(sig, old)
+            except (OSError, ValueError, TypeError):
+                pass
+
+
 def execute_plan(paths: Paths, state: Dict[str, Any], plan: Plan, op: str = "switch",
                  new_active: Optional[str] = None, fail_hook: Optional[Callable[[int], None]] = None) -> None:
     """Run the moves with a persistent journal; roll back on failure."""
@@ -1266,28 +1500,31 @@ def execute_plan(paths: Paths, state: Dict[str, Any], plan: Plan, op: str = "swi
     state["journal"] = journal
     save_state(paths, state)
     log_event(paths, "%s start %s -> %s (%d moves)" % (op, plan.src, new_active, len(plan.moves)))
-    try:
-        for i, (s, d) in enumerate(plan.moves):
-            if fail_hook:
-                fail_hook(i)
-            move(s, d)
-            journal["done"] = i + 1
-            save_state(paths, state)
-    except BaseException as e:  # noqa: BLE001 - includes KeyboardInterrupt
-        err = "%s: %s" % (type(e).__name__, e)
-        log_event(paths, "%s failed at step %d: %s" % (op, journal["done"], err))
+    with _Signals() as sigs:
         try:
-            _rollback(paths, journal)
-        except Exception as e2:  # noqa: BLE001
-            log_event(paths, "rollback failed: %s" % e2)
-            raise SwitchError(t("switch_failed_stuck", err=err)) from e
-        state["journal"] = None
-        save_state(paths, state)
-        log_event(paths, "%s rolled back" % op)
-        if isinstance(e, KeyboardInterrupt):
-            raise
-        raise SwitchError(t("switch_failed_rolled_back", err=err)) from e
-    _finish(paths, state, journal)
+            for i, (s, d) in enumerate(plan.moves):
+                if fail_hook:
+                    fail_hook(i)
+                move(s, d)
+                journal["done"] = i + 1
+                save_state(paths, state)
+        except BaseException as e:  # noqa: BLE001 - includes KeyboardInterrupt
+            sigs.hold()
+            err = "%s: %s" % (type(e).__name__, e)
+            log_event(paths, "%s failed at step %d: %s" % (op, journal["done"], err))
+            try:
+                _rollback(paths, journal)
+            except Exception as e2:  # noqa: BLE001
+                log_event(paths, "rollback failed: %s" % e2)
+                raise SwitchError(t("switch_failed_stuck", err=err)) from e
+            state["journal"] = None
+            save_state(paths, state)
+            log_event(paths, "%s rolled back" % op)
+            if isinstance(e, KeyboardInterrupt):
+                raise
+            raise SwitchError(t("switch_failed_rolled_back", err=err)) from e
+        sigs.hold()  # finishing touches must not be interrupted either
+        _finish(paths, state, journal)
 
 
 def _finish(paths: Paths, state: Dict[str, Any], journal: Dict[str, Any]) -> None:
@@ -1298,9 +1535,47 @@ def _finish(paths: Paths, state: Dict[str, Any], journal: Dict[str, Any]) -> Non
     state["journal"] = None
     state["live"] = paths.live_signature()
     meta = state["profiles"].setdefault(new, {"created": now_iso(), "note": ""})
+    meta.setdefault("id", uuid.uuid4().hex)
     meta["last_used"] = now_iso()
     save_state(paths, state)
+    write_marker(paths, state)
     log_event(paths, "%s done: active=%s" % (journal["op"], new))
+
+
+def write_marker(paths: Paths, state: Dict[str, Any]) -> None:
+    active = state["active"]
+    data = {
+        "tool": "claude-switch",
+        "profile": active,
+        "id": state["profiles"][active].get("id"),
+        "store": str(paths.store),
+        "note": "Which claude-switch profile this folder belongs to. Safe to delete.",
+    }
+    try:
+        write_json_atomic(paths.config_dir / MARKER_FILE, data)
+    except OSError as e:
+        log_event(paths, "could not write marker: %s" % e)
+
+
+def read_marker(paths: Paths) -> Optional[Dict[str, Any]]:
+    try:
+        data = read_json(paths.config_dir / MARKER_FILE)
+        return data if isinstance(data, dict) else None
+    except (OSError, ValueError):
+        return None
+
+
+def _check_marker(paths: Paths, state: Dict[str, Any], force: bool) -> None:
+    """Refuse when the live config belongs to another profile or store --
+    e.g. two stores managing the same ~/.claude, or a restored backup."""
+    m = read_marker(paths)
+    if not m or force:
+        return
+    same_store = os.path.normcase(str(m.get("store") or "")) == os.path.normcase(str(paths.store))
+    same_id = m.get("id") == state["profiles"].get(state["active"], {}).get("id")
+    if not (same_store and same_id):
+        raise SwitchError(t("marker_mismatch", profile=m.get("profile"), store=m.get("store"),
+                            active=state["active"], our_store=paths.store))
 
 
 def _aside(paths: Paths, p: Path) -> Path:
@@ -1388,6 +1663,9 @@ def _guard(paths: Paths, state: Dict[str, Any], opts: Options) -> None:
         raise SwitchError(t("journal_pending", op=j["op"], src=j["from"], dst=j["to"]))
     _check_live_signature(paths, state, opts.force)
     _check_store_location(paths)
+    _check_marker(paths, state, opts.force)
+    if IS_WINDOWS and is_store_python() and any(d.is_dir() for d in paths.desktop_dirs()):
+        raise SwitchError(t("store_python"))
     for where_ in [paths.config_dir] + [live.parent for live, _ in paths.unit_slots()]:
         if not same_device(paths.store, where_):
             raise SwitchError(t("cross_device", store=paths.store, live=where_))
@@ -1625,7 +1903,7 @@ def create_profile(paths: Paths, state: Dict[str, Any], name: str, note: Optiona
         raise
     if note is None:
         note = t("note_clone", src=clone_from) if clone_from else t("note_clean")
-    state["profiles"][name] = {"created": now_iso(), "note": note, "last_used": None}
+    state["profiles"][name] = {"created": now_iso(), "note": note, "last_used": None, "id": uuid.uuid4().hex}
     save_state(paths, state)
     log_event(paths, "create %s (%s)" % (name, "clone of %s" % clone_from if clone_from else "fresh"))
     return name
@@ -1657,7 +1935,7 @@ def clean(paths: Paths, opts: Options, name: str = DEFAULT_CLEAN_NAME, old_name:
     name = validate_name(name)
     if opts.dry_run:
         state = load_state(paths)
-        existing = next((n for n in (state or {}).get("profiles", {}) if n.lower() == name.lower()), None)
+        existing = next((n for n in (state or {}).get("profiles", {}) if same_name(n, name)), None)
         if state is None or existing is None:
             _dry_run_first_park(paths, name)
             return
@@ -1669,7 +1947,7 @@ def clean(paths: Paths, opts: Options, name: str = DEFAULT_CLEAN_NAME, old_name:
     _wait_for_claude_to_exit(opts)  # before creating anything
     with StoreLock(paths):
         state = ensure_state(paths, old_name)
-        existing = next((n for n in state["profiles"] if n.lower() == name.lower()), None)
+        existing = next((n for n in state["profiles"] if same_name(n, name)), None)
         if existing is None:
             create_profile(paths, state, name, copy_items=copy_items, no_account_sync=no_account_sync)
             say(t("created_profile", name=name))
@@ -1719,6 +1997,7 @@ def reset_profile(paths: Paths, name: str, opts: Options, copy_items: Iterable[s
             state["active"] = name
             state["previous"] = previous
             save_state(paths, state)
+            write_marker(paths, state)
         else:
             if lexists(paths.profile_dir(name)):
                 move(paths.profile_dir(name), trash)
@@ -1774,14 +2053,14 @@ def rename_profile(paths: Paths, old: str, new: str) -> None:
         state = ensure_state(paths)
         old = _find_profile(state, old)
         new = validate_name(new)
-        if new.lower() != old.lower() and _name_taken(paths, state, new):
+        if not same_name(new, old) and _name_taken(paths, state, new):
             raise SwitchError(t("profile_exists", name=new))
         if state.get("journal"):
             j = state["journal"]
             raise SwitchError(t("journal_pending", op=j["op"], src=j["from"], dst=j["to"]))
         src = paths.profile_dir(old)
         if lexists(src):
-            if new.lower() == old.lower():  # case-only rename on case-insensitive disks
+            if same_name(new, old):  # case-only rename on case-insensitive disks
                 tmp = paths.profiles_dir / ("_rename-%s" % stamp())
                 os.rename(str(src), str(tmp))
                 os.rename(str(tmp), str(paths.profile_dir(new)))
@@ -1794,6 +2073,8 @@ def rename_profile(paths: Paths, old: str, new: str) -> None:
             if state.get(key) == old:
                 state[key] = new
         save_state(paths, state)
+        if state["active"] == new and read_marker(paths):
+            write_marker(paths, state)
         log_event(paths, "rename %s -> %s" % (old, new))
         say(t("renamed", old=old, new=new))
 
@@ -1999,7 +2280,8 @@ def import_profile(paths: Paths, archive: str, name: Optional[str] = None) -> st
             except BaseException:
                 rmtree(tmp)
                 raise
-        state["profiles"][name] = {"created": now_iso(), "note": t("note_import", file=src.name), "last_used": None}
+        state["profiles"][name] = {"created": now_iso(), "note": t("note_import", file=src.name), "last_used": None,
+                                   "id": uuid.uuid4().hex}
         save_state(paths, state)
         log_event(paths, "import %s as %s" % (src, name))
         say(t("imported", file=src, name=name))
@@ -2096,9 +2378,18 @@ def doctor(paths: Paths) -> List[str]:
     env = settings.get("env") if isinstance(settings.get("env"), dict) else {}
     if env.get("CLAUDE_CONFIG_DIR"):
         notes.append(t("doctor_settings_config_dir", dir=env["CLAUDE_CONFIG_DIR"]))
-    for var in AUTH_ENV_VARS:
-        if os.environ.get(var) or env.get(var):
+    for var in AUTH_ENV_VARS + ("ANTHROPIC_BASE_URL",):
+        if os.environ.get(var):
             notes.append(t("doctor_auth_env", var=var))
+    provider = [v for v in AUTH_ENV_VARS + ("ANTHROPIC_BASE_URL", "ANTHROPIC_MODEL") if env.get(v)]
+    if provider:
+        notes.append(t("doctor_settings_provider", vars=", ".join(provider)))
+    if os.environ.get("CLAUDE_CODE_PLUGIN_CACHE_DIR"):
+        notes.append(t("doctor_plugin_dir", dir=os.environ["CLAUDE_CODE_PLUGIN_CACHE_DIR"]))
+    if (paths.home / ".cc-switch").exists():
+        notes.append(t("doctor_cc_switch"))
+    if (paths.home / ".config" / "anthropic").is_dir():
+        notes.append(t("doctor_anthropic_profiles", dir=paths.home / ".config" / "anthropic"))
     if paths.config_dir_from_env:
         notes.append(t("config_dir_env_note"))
     for d in paths.desktop_dirs():
@@ -2394,7 +2685,7 @@ def main(argv: Optional[List[str]] = None, proc_finder: Optional[Callable[[], Li
         yes=args.yes,
         interactive=interactive,
         quit_desktop=getattr(args, "quit_desktop", False),
-        proc_finder=proc_finder or (lambda: find_claude_processes(paths.config_dir)),
+        proc_finder=proc_finder or (lambda: find_claude_processes(paths)),
     )
     cmd = args.cmd or ("menu" if interactive else "status")
     try:
