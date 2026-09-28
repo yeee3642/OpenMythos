@@ -228,3 +228,13 @@ def test_dhl_candidate_sources_use_real_links_only():
     assert "https://mirror.xyz/revertfinance.eth/abc" in urls
     assert "https://x.com/a/status/1" in urls
     assert "https://etherscan.io/tx/0xdead" in urls
+
+
+def test_markdown_report(conn, dataset):
+    from hack_db.report import markdown_report, usd_zh
+
+    text = markdown_report(conn, dataset.lookups()["dataset"]["chain_zh"], "2026-09-28")
+    assert "### 年度統計" in text and "### 損失前十名" in text
+    assert usd_zh(326_000_000) == "3.26 億美元"
+    assert usd_zh(52_800_000) == "5,280 萬美元"
+    assert usd_zh(0) == "0"
