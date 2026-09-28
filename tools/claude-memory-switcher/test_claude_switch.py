@@ -1387,6 +1387,132 @@ def test_clean_warns_when_creation_options_cannot_apply(home, capsys):
     assert "already exists" in capsys.readouterr().out
 
 
+# --------------------------------------------------------------------------
+# findings from the final end-to-end check
+# --------------------------------------------------------------------------
+
+
+def test_redaction_only_touches_credentials():
+    cfg = {"env": {"CLAUDE_CODE_MAX_OUTPUT_TOKENS": "32000", "MAX_THINKING_TOKENS": "16000",
+                   "CLAUDE_CODE_API_KEY_HELPER_TTL_MS": "3600000", "ANTHROPIC_API_KEY": "sk", "GITHUB_TOKEN": "g",
+                   "AWS_SECRET_ACCESS_KEY": "a", "DB_PASSWORD": "p", "ANTHROPIC_BASE_URL": "https://x"},
+           "mcpServers": {"m": {"headers": {"Authorization": "Bearer x", "X-Api-Key": "k", "Accept": "json"}}},
+           "primaryApiKey": "sk-ant"}
+    assert cs.redact_secrets(cfg)
+    env = cfg["env"]
+    assert env["CLAUDE_CODE_MAX_OUTPUT_TOKENS"] == "32000" and env["MAX_THINKING_TOKENS"] == "16000"
+    assert env["CLAUDE_CODE_API_KEY_HELPER_TTL_MS"] == "3600000" and env["ANTHROPIC_BASE_URL"] == "https://x"
+    assert all(env[k] == "<redacted>" for k in ("ANTHROPIC_API_KEY", "GITHUB_TOKEN", "AWS_SECRET_ACCESS_KEY",
+                                                 "DB_PASSWORD"))
+    h = cfg["mcpServers"]["m"]["headers"]
+    assert h["Authorization"] == h["X-Api-Key"] == "<redacted>" and h["Accept"] == "json"
+    assert "primaryApiKey" not in cfg
+
+
+def test_import_warns_about_redacted_values(home, tmp_path, capsys):
+    populate(home)
+    (home / ".claude" / "settings.json").write_text('{"env": {"ANTHROPIC_AUTH_TOKEN": "t"}}')
+    paths = P(home)
+    z = cs.export_profile(paths, "original", out=str(tmp_path / "b.zip"))
+    capsys.readouterr()
+    cs.import_profile(paths, str(z), "restored")
+    out = capsys.readouterr().out
+    assert "ANTHROPIC_AUTH_TOKEN" in out and "<redacted>" in out
+
+
+def test_reset_keeps_the_profiles_own_choices(home):
+    populate(home)
+    (home / ".claude" / "settings.json").write_text('{"env": {"ANTHROPIC_BASE_URL": "https://relay"}}')
+    paths = P(home)
+    cs.new_profile(paths, "w", opts(), keep_api=True, no_account_sync=True, switch=True)
+    (home / ".claude" / "CLAUDE.md").write_text("to be emptied")
+    cs.reset_profile(paths, "w", opts())  # scripted (yes=True), no flags
+    s = json.loads((home / ".claude" / "settings.json").read_text())
+    assert s["env"]["ANTHROPIC_BASE_URL"] == "https://relay" and s["syncClaudeAiSkills"] is False
+    assert not (home / ".claude" / "CLAUDE.md").exists()
+    cs.reset_profile(paths, "w", opts(), keep_api=False, no_account_sync=False)
+    assert not (home / ".claude" / "settings.json").exists()
+
+
+def test_reset_without_terminal_needs_yes(home):
+    populate(home)
+    paths = P(home)
+    cs.init_state(paths)
+    with pytest.raises(cs.SwitchError):
+        cs.reset_profile(paths, "original", opts(yes=False, interactive=False))
+    assert (home / ".claude" / "CLAUDE.md").exists()
+
+
+@pytest.mark.parametrize("direction", ["forward", "back"])
+def test_interrupted_reset_repairs_to_clean_names(home, monkeypatch, direction):
+    populate(home)
+    before = live_snapshot(home)
+    paths = P(home)
+    cs.init_state(paths)
+    real_exec = cs.execute_plan
+
+    def crashing_exec(paths_, state, plan, op="switch", new_active=None, fail_hook=None):
+        monkeypatch.setattr(cs, "_rollback", lambda *a: (_ for _ in ()).throw(RuntimeError("crash")))
+        return real_exec(paths_, state, plan, op, new_active,
+                         fail_hook=lambda i: (_ for _ in ()).throw(KeyboardInterrupt) if i == 3 else None)
+
+    monkeypatch.setattr(cs, "execute_plan", crashing_exec)
+    with pytest.raises(cs.SwitchError):
+        cs.reset_profile(paths, "original", opts())
+    monkeypatch.undo()
+    for k, v in isolated_env(home).items():
+        monkeypatch.setenv(k, v)
+    cs.repair(paths, opts(), direction=direction)
+    state = cs.load_state(paths)
+    assert list(state["profiles"]) == ["original"] and state["active"] == "original"
+    assert not list(paths.profiles_dir.glob("reset-*")) and not list(paths.profiles_dir.glob("_new-*"))
+    if direction == "back":
+        assert live_snapshot(home) == before
+        assert cs.only_empty_dirs(paths.profile_dir("original"))  # the unused fresh seed is gone
+    else:
+        assert not (home / ".claude" / "CLAUDE.md").exists()
+        trashed = list((paths.store / cs.TRASH_DIR).glob("*-original"))
+        assert (trashed[0] / "config" / "CLAUDE.md").read_text() == "# my global memory\n"
+
+
+def test_import_rejects_bad_manifests_before_setting_up(home, tmp_path):
+    paths = P(home)
+    for i, payload in enumerate(["{not json", "[1, 2]", '{"tool": "other"}']):
+        z = tmp_path / ("m%d.zip" % i)
+        with zipfile.ZipFile(z, "w") as zf:
+            zf.writestr(cs.MANIFEST_NAME, payload)
+        with pytest.raises(cs.SwitchError):
+            cs.import_profile(paths, str(z))
+    assert not paths.store.exists()
+
+
+def test_free_name_and_fresh_home_counts_original_as_taken():
+    assert cs.free_name(None, "original") == "original-restored"
+    st = {"profiles": {"original": {}, "original-restored": {}}}
+    assert cs.free_name(st, "original") == "original-restored-2"
+
+
+def test_fresh_home_commands_do_not_set_up(home):
+    paths = P(home)
+    no = lambda: []  # noqa: E731
+    assert cs.main(["repair", "--dry-run"], proc_finder=no) == 0
+    assert cs.main(["rename", "foo", "bar"], proc_finder=no) == 1
+    assert cs.main(["delete", "foo"], proc_finder=no) == 1
+    assert cs.main(["new", "original", "--dry-run"], proc_finder=no) == 1
+    assert cs.main(["clone", "nosuch", "x", "--dry-run"], proc_finder=no) == 1
+    assert cs.main(["reset", "nosuch", "--dry-run"], proc_finder=no) == 1
+    assert cs.main(["menu", "--dry-run"], proc_finder=no) == 2
+    assert not paths.store.exists()
+
+
+def test_export_into_config_dir_is_refused_without_side_effects(home):
+    populate(home)
+    paths = P(home)
+    with pytest.raises(cs.SwitchError):
+        cs.export_profile(paths, "original", out=str(home / ".claude" / "mybackups") + os.sep)
+    assert not (home / ".claude" / "mybackups").exists()
+
+
 def test_messages_have_both_languages_and_matching_fields():
     import string
 

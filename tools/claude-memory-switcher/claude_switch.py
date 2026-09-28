@@ -425,6 +425,21 @@ MESSAGES: Dict[str, Tuple[str, str]] = {
         "請關閉後再試一次。沒有任何檔案被刪除；如果剛才正在切換，請執行 `repair`。",
     ),
     "would_create": ("would create profile '{name}'", "將建立設定檔「{name}」"),
+    "trash_needs_yes": ("Add --yes to empty the trash without a prompt: trash --empty --yes",
+                        "要在沒有提示的情況下清空垃圾桶，請加上 --yes：trash --empty --yes"),
+    "import_redacted": (
+        "Note: this backup was made without secrets, so these were replaced with <redacted> and must be set again "
+        "after switching to it: {items}",
+        "注意：這份備份匯出時沒有包含機密，下列項目已被改成 <redacted>，切換過去後需要重新設定：{items}",
+    ),
+    "ask_backup_secrets": (
+        "Include API keys and tokens in this backup so it restores completely? (Keep the zip private.)",
+        "要在這份備份裡包含 API 金鑰與權杖，讓它能完整還原嗎？（請妥善保管 zip）",
+    ),
+    "reset_needs_yes": (
+        "reset empties a profile (its old contents go to the trash). Add --yes to do it without a prompt.",
+        "reset 會清空一個設定檔（舊內容移到垃圾桶）。要在沒有提示的情況下執行，請加上 --yes。",
+    ),
     "confirm_reset": (
         "Empty profile '{name}' ({size}) so it is clean again? Its memory, conversations and settings go to the trash.",
         "要把設定檔「{name}」（{size}）清空成乾淨狀態嗎？它的記憶、對話和設定會移到垃圾桶。",
@@ -477,10 +492,10 @@ MESSAGES: Dict[str, Tuple[str, str]] = {
         "Claude Desktop 在 {file} 有自己的 MCP 伺服器設定，它不屬於設定檔。",
     ),
     "doctor_settings_provider": (
-        "! This profile's settings.json sets {vars} (an API provider / key). A new clean profile will not have it; "
-        "create it with --copy settings.json to keep it.",
-        "! 這個設定檔的 settings.json 設定了 {vars}（API 供應商／金鑰）。新的乾淨設定檔不會有這些；"
-        "想保留的話，建立時加上 --copy settings.json。",
+        "! This profile routes Claude Code through an API provider ({vars}). New clean profiles get these only if "
+        "you keep them (answer yes when asked, or --keep-api-settings).",
+        "! 這個設定檔讓 Claude Code 透過 API 供應商連線（{vars}）。新的乾淨設定檔只有在你選擇保留時才會有這些"
+        "（被詢問時回答「是」，或加上 --keep-api-settings）。",
     ),
     "doctor_plugin_dir": (
         "! CLAUDE_CODE_PLUGIN_CACHE_DIR={dir}: plugins are stored there and are not switched.",
@@ -1771,6 +1786,7 @@ def execute_plan(paths: Paths, state: Dict[str, Any], plan: Plan, op: str = "swi
             except Exception as e2:  # noqa: BLE001
                 log_event(paths, "rollback failed: %s" % e2)
                 raise SwitchError(t("switch_failed_stuck", err=err)) from e
+            _discard_reset_seed(paths, journal)
             state["journal"] = None
             save_state(paths, state)
             log_event(paths, "%s rolled back" % op)
@@ -1859,6 +1875,16 @@ def _aside(paths: Paths, p: Path) -> Path:
 # can be the source of one move and the destination of a later one (e.g. both
 # profiles have CLAUDE.md), so recovery must only walk the moves on its own
 # side of k, in order.
+
+
+def _discard_reset_seed(paths: Paths, journal: Dict[str, Any]) -> None:
+    """A rolled-back reset leaves the fresh contents it generated in the
+    active profile's (otherwise empty) folder; they are ours, not the user's."""
+    if journal.get("op") == "reset" and journal.get("from") == journal.get("to"):
+        pdir = paths.profile_dir(journal["to"])
+        if lexists(pdir):
+            rmtree(pdir)
+        pdir.mkdir(parents=True, exist_ok=True)
 
 
 def _progress(paths: Paths, state: Optional[Dict[str, Any]], journal: Dict[str, Any], **kw: Any) -> None:
@@ -2148,13 +2174,17 @@ def _apply_settings(settings_file: Path, values: Dict[str, Any]) -> None:
     write_json_atomic(settings_file, data)
 
 
-def api_settings(paths: Paths) -> Tuple[Dict[str, Any], Dict[str, Any]]:
-    """(env, top-level settings) in the live profile that route Claude Code to
-    an API provider: settings.json "env" + apiKeyHelper, and the legacy "env"
-    block of ~/.claude.json."""
+def api_settings(paths: Paths, profile: Optional[str] = None) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+    """(env, top-level settings) that route Claude Code to an API provider:
+    settings.json "env" + apiKeyHelper, and the legacy "env" block of
+    ~/.claude.json.  From the live files, or from a parked `profile`."""
     env: Dict[str, Any] = {}
     top: Dict[str, Any] = {}
-    sources = [(paths.config_dir / "settings.json", True), (paths.effective_config(), False)]
+    if profile is None:
+        sources = [(paths.config_dir / "settings.json", True), (paths.effective_config(), False)]
+    else:
+        pdir = paths.profile_dir(profile)
+        sources = [(pdir / SLOT_CONFIG / "settings.json", True), (pdir / SLOT_GLOBAL, False)]
     for f, is_settings in sources:
         try:
             data = read_json(f)
@@ -2187,6 +2217,49 @@ def _seed_global_config(paths: Paths, source: Optional[Path] = None) -> Dict[str
     return cfg
 
 
+def _build_fresh(paths: Paths, dest: Path, copy_items: Iterable[str] = (), no_account_sync: bool = False,
+                 keep_api: bool = False, api_from: Optional[str] = None) -> None:
+    """Write a fresh profile's contents (seeded global config, optional copies
+    and settings) into the empty folder `dest`."""
+    (dest / SLOT_CONFIG).mkdir(parents=True, exist_ok=True)
+    for i, (live, rel) in enumerate(paths.global_files):
+        if i == 0:
+            write_json_atomic(dest / rel, _seed_global_config(paths), mode=0o600)
+        elif lexists(live):
+            write_json_atomic(dest / rel, _seed_global_config(paths, live), mode=0o600)
+    copied = []
+    for item in copy_items:
+        item = item.strip().strip("/\\")
+        if not item:
+            continue
+        if is_pinned(item) or "/" in item or "\\" in item or ":" in item or item in (".", ".."):
+            continue
+        src_path = paths.config_dir / item
+        if not lexists(src_path):
+            say(t("copy_missing", item=item))
+            continue
+        copy_any(src_path, dest / SLOT_CONFIG / item, follow_top=True)
+        copied.append(item)
+    if copied:
+        say(t("copied_items", items=", ".join(copied)))
+    if keep_api:
+        env, top = api_settings(paths, api_from)
+        if env or top:
+            _apply_settings(dest / SLOT_CONFIG / "settings.json", dict(top, env=env) if env else top)
+            say(t("api_kept", keys=", ".join(sorted(list(env) + list(top)))))
+    if no_account_sync:
+        _apply_settings(dest / SLOT_CONFIG / "settings.json", NO_ACCOUNT_SYNC_SETTINGS)
+        say(t("no_account_sync_done"))
+
+
+def _account_sync_off(settings_file: Path) -> bool:
+    try:
+        data = read_json(settings_file)
+    except (OSError, ValueError):
+        return False
+    return isinstance(data, dict) and all(data.get(k) == v for k, v in NO_ACCOUNT_SYNC_SETTINGS.items())
+
+
 def create_profile(paths: Paths, state: Dict[str, Any], name: str, note: Optional[str] = None,
                    copy_items: Iterable[str] = (), clone_from: Optional[str] = None,
                    no_account_sync: bool = False, keep_api: bool = False) -> str:
@@ -2212,35 +2285,7 @@ def create_profile(paths: Paths, state: Dict[str, Any], name: str, note: Optiona
                         copy_any(sdir / rel, tmp / rel, follow_top=True)
             (tmp / SLOT_CONFIG).mkdir(exist_ok=True)
         else:
-            (tmp / SLOT_CONFIG).mkdir()
-            for i, (live, rel) in enumerate(paths.global_files):
-                if i == 0:
-                    write_json_atomic(tmp / rel, _seed_global_config(paths), mode=0o600)
-                elif lexists(live):
-                    write_json_atomic(tmp / rel, _seed_global_config(paths, live), mode=0o600)
-            copied = []
-            for item in copy_items:
-                item = item.strip().strip("/\\")
-                if not item:
-                    continue
-                if is_pinned(item) or "/" in item or "\\" in item or ":" in item or item in (".", ".."):
-                    continue
-                src_path = paths.config_dir / item
-                if not lexists(src_path):
-                    say(t("copy_missing", item=item))
-                    continue
-                copy_any(src_path, tmp / SLOT_CONFIG / item, follow_top=True)
-                copied.append(item)
-            if copied:
-                say(t("copied_items", items=", ".join(copied)))
-            if keep_api:
-                env, top = api_settings(paths)
-                if env or top:
-                    _apply_settings(tmp / SLOT_CONFIG / "settings.json", dict(top, env=env) if env else top)
-                    say(t("api_kept", keys=", ".join(sorted(list(env) + list(top)))))
-            if no_account_sync:
-                _apply_settings(tmp / SLOT_CONFIG / "settings.json", NO_ACCOUNT_SYNC_SETTINGS)
-                say(t("no_account_sync_done"))
+            _build_fresh(paths, tmp, copy_items, no_account_sync, keep_api)
         os.rename(str(tmp), str(paths.profile_dir(name)))
     except BaseException:
         rmtree(tmp)
@@ -2270,8 +2315,17 @@ def new_profile(paths: Paths, name: str, opts: Options, copy_items: Iterable[str
                 clone_from: Optional[str] = None, switch: bool = False, no_account_sync: bool = False,
                 keep_api: Optional[bool] = None) -> None:
     if opts.dry_run:
+        st = load_state(paths)
+        name = validate_name(name)
+        if (st and _name_taken(paths, st, name)) or (not st and same_name(name, DEFAULT_OLD_NAME)):
+            raise SwitchError(t("profile_exists", name=name))
+        if clone_from:
+            if st:
+                _find_profile(st, clone_from)
+            elif not same_name(clone_from, DEFAULT_OLD_NAME):
+                raise SwitchError(t("no_such_profile", name=clone_from))
         say(t("dry_run_header"))
-        say("  (%s)" % t("would_create", name=validate_name(name)))
+        say("  (%s)" % t("would_create", name=name))
         if switch:
             st = load_state(paths)
             _dry_run_first_park(paths, st["active"] if st else DEFAULT_OLD_NAME, None)
@@ -2316,7 +2370,7 @@ def clean(paths: Paths, opts: Options, name: str = DEFAULT_CLEAN_NAME, old_name:
         return
     _wait_for_claude_to_exit(opts)  # before creating anything
     st = load_state(paths)
-    will_create = reset or st is None or not any(same_name(n, name) for n in st["profiles"])
+    will_create = st is None or not any(same_name(n, name) for n in st["profiles"])
     keep = _decide_keep_api(paths, opts, keep_api) if will_create else False
     with StoreLock(paths):
         state = ensure_state(paths, old_name)
@@ -2330,12 +2384,12 @@ def clean(paths: Paths, opts: Options, name: str = DEFAULT_CLEAN_NAME, old_name:
             reset = False  # brand new already
         target = existing or name
     if reset:
-        reset_profile(paths, target, opts, copy_items=copy_items, no_account_sync=no_account_sync,
-                      keep_api=keep)
+        reset_profile(paths, target, opts, copy_items=copy_items,
+                      no_account_sync=no_account_sync or None, keep_api=keep_api)
     else:
         switch_to(paths, target, opts, confirm=True)
     say(t("shared_login_note"))
-    for line in doctor(paths):
+    for line in doctor(paths, include_provider=False):  # that choice was just made
         if line.startswith("!"):
             say(line)
     found = scan_projects(paths)
@@ -2348,65 +2402,83 @@ def clean(paths: Paths, opts: Options, name: str = DEFAULT_CLEAN_NAME, old_name:
 
 
 def reset_profile(paths: Paths, name: str, opts: Options, copy_items: Iterable[str] = (),
-                  no_account_sync: bool = False, keep_api: bool = False) -> None:
-    """Make `name` fresh again (and active); its old contents go to the trash."""
-    if opts.dry_run and load_state(paths) is None:
-        _dry_run_first_park(paths, DEFAULT_OLD_NAME, None)
+                  no_account_sync: Optional[bool] = None, keep_api: Optional[bool] = None) -> None:
+    """Make `name` fresh again (and active); its old contents go to the trash.
+
+    The fresh contents are built right inside the profile's own folder (empty
+    while the profile is active), so the profile keeps its name at every
+    moment; an interrupted reset is an ordinary journaled switch for repair."""
+    state0 = load_state(paths)
+    if state0 is None:
+        if not same_name(name, DEFAULT_OLD_NAME):
+            raise SwitchError(t("no_such_profile", name=name))
+        if opts.dry_run:
+            say(t("dry_run_header"))
+            trash = paths.store / TRASH_DIR / ("%s-%s" % (stamp(), DEFAULT_OLD_NAME))
+            for live, rel in _live_items(paths):
+                say("  %s\n    -> %s" % (live, trash / rel))
+            return
+    if opts.dry_run:
+        state = state0
+        name = _find_profile(state, name)
+        trash = paths.store / TRASH_DIR / ("%s-%s" % (stamp(), name))
+        say(t("dry_run_header"))
+        if state["active"] == name:
+            for live, rel in _live_items(paths):
+                say("  %s\n    -> %s" % (live, trash / rel))
+        else:
+            say("  %s\n    -> %s" % (paths.profile_dir(name), trash))
         return
+    if not opts.interactive and not opts.yes:
+        raise SwitchError(t("reset_needs_yes"))
     with StoreLock(paths):
         state = ensure_state(paths)
         _no_journal(state)
         name = _find_profile(state, name)
-        trash = unique_path(paths.store / TRASH_DIR / ("%s-%s" % (stamp(), name)))
-        if opts.dry_run:
-            say(t("dry_run_header"))
-            if state["active"] == name:
-                for live, rel in _live_items(paths):
-                    say("  %s\n    -> %s" % (live, trash / rel))
-            else:
-                say("  %s\n    -> %s" % (paths.profile_dir(name), trash))
-            return
+        active = state["active"] == name
         if opts.interactive and not opts.yes:
             size = human_size(profile_size(paths, state, name))
             if not ask_yes_no(t("confirm_reset", name=name, size=size), default=False):
                 raise SwitchError(t("cancelled"))
-        if state["active"] == name:
+        if active:
             _guard(paths, state, opts)
-            previous = state.get("previous")
-            note = state["profiles"][name].get("note") or t("note_clean")
-            tmp_name = "reset-%s" % stamp()
-            create_profile(paths, state, tmp_name, note=note, copy_items=copy_items,
-                           no_account_sync=no_account_sync, keep_api=keep_api)
-            plan = plan_switch(paths, state, tmp_name, park_into=trash)
+        # Keep the profile's own choices unless told otherwise.
+        settings_file = (paths.config_dir if active else paths.profile_dir(name) / SLOT_CONFIG) / "settings.json"
+        if no_account_sync is None:
+            no_account_sync = _account_sync_off(settings_file)
+        api_from = None if active else name
+        if keep_api is not None:
+            keep = keep_api
+        elif opts.interactive and not opts.yes:
+            keep = _decide_keep_api(paths, opts, None) if active else any(api_settings(paths, name))
+        else:  # scripted reset: keep the profile's own connection settings
+            keep = any(api_settings(paths, api_from))
+        trash = unique_path(paths.store / TRASH_DIR / ("%s-%s" % (stamp(), name)))
+        tmp = paths.profiles_dir / ("_new-%s-%s" % (stamp(), os.getpid()))
+        rmtree(tmp)
+        tmp.mkdir(parents=True)
+        try:
+            _build_fresh(paths, tmp, copy_items, no_account_sync, keep, api_from)
+        except BaseException:
+            rmtree(tmp)
+            raise
+        pdir = paths.profile_dir(name)
+        if active:
+            # The active profile's folder is empty; anything left in it is kept.
+            if lexists(pdir) and not only_empty_dirs(pdir):
+                move(pdir, trash / "_leftovers")
+            rmtree(pdir)
+            _rename_with_retry(tmp, pdir)
+            plan = plan_switch(paths, state, name, park_into=trash)
             execute_plan(paths, state, plan, op="reset")
-            # The fresh profile is live now under tmp_name; give it the old name.
-            old_dir = paths.profile_dir(name)
-            if only_empty_dirs(old_dir):
-                rmtree(old_dir)
-            else:  # leftovers: keep them with the rest of the old contents
-                move(old_dir, trash / "_leftovers")
-            os.rename(str(paths.profile_dir(tmp_name)), str(paths.profile_dir(name)))
-            state["profiles"][name] = state["profiles"].pop(tmp_name)
-            state["active"] = name
-            state["previous"] = previous
-            save_state(paths, state)
-            write_marker(paths, state)
         else:
-            note = state["profiles"][name].get("note")
-            tmp_name = "reset-%s" % stamp()
-            create_profile(paths, state, tmp_name, note=note, copy_items=copy_items,
-                           no_account_sync=no_account_sync, keep_api=keep_api)
-            if lexists(paths.profile_dir(name)):
-                move(paths.profile_dir(name), trash)
-            _rename_with_retry(paths.profile_dir(tmp_name), paths.profile_dir(name))
-            meta = state["profiles"].pop(tmp_name)
-            meta["id"] = state["profiles"][name].get("id", meta["id"])
-            state["profiles"][name] = meta
-            save_state(paths, state)
+            if lexists(pdir):
+                move(pdir, trash)
+            _rename_with_retry(tmp, pdir)
         log_event(paths, "reset %s -> old contents in %s" % (name, trash))
         say(t("reset_done", name=name, path=trash))
-        active = state["active"]
-    if active != name:
+        now_active = state["active"]
+    if now_active != name:
         switch_to(paths, name, opts)
 
 
@@ -2427,7 +2499,13 @@ def toggle(paths: Paths, opts: Options) -> None:
     switch_to(paths, target, opts)
 
 
+def _need_state(paths: Paths) -> None:
+    if load_state(paths) is None:
+        raise SwitchError(t("not_initialized", name=DEFAULT_OLD_NAME))
+
+
 def delete_profile(paths: Paths, name: str, opts: Options) -> Optional[Path]:
+    _need_state(paths)
     with StoreLock(paths):
         state = ensure_state(paths)
         _no_journal(state)
@@ -2458,6 +2536,7 @@ def delete_profile(paths: Paths, name: str, opts: Options) -> Optional[Path]:
 
 
 def rename_profile(paths: Paths, old: str, new: str) -> None:
+    _need_state(paths)
     with StoreLock(paths):
         state = ensure_state(paths)
         old = _find_profile(state, old)
@@ -2491,6 +2570,9 @@ def rename_profile(paths: Paths, old: str, new: str) -> None:
 
 
 def repair(paths: Paths, opts: Options, direction: Optional[str] = None) -> None:
+    if not (load_state(paths) or {}).get("journal"):
+        say(t("no_journal"))  # (and never create the store just to find that out)
+        return
     with StoreLock(paths):
         state = load_state(paths)
         j = (state or {}).get("journal")
@@ -2532,6 +2614,7 @@ def repair(paths: Paths, opts: Options, direction: Optional[str] = None) -> None
                 say(t("repaired_forward", name=j["to"]))
             else:
                 _rollback(paths, j, state)
+                _discard_reset_seed(paths, j)
                 state["journal"] = None
                 save_state(paths, state)
                 log_event(paths, "repair: rolled back %s -> %s" % (j["from"], j["to"]))
@@ -2579,6 +2662,8 @@ def export_profile(paths: Paths, name: str, out: Optional[str] = None, include_s
         dest = Path.cwd() / fname
     else:
         dest = Path(out).expanduser()
+        if is_within(dest, paths.config_dir):
+            raise SwitchError(t("error", err="refusing to write the archive inside %s" % paths.config_dir))
         if out.endswith(("/", "\\")) or dest.is_dir() or (not dest.exists() and dest.suffix.lower() != ".zip"):
             dest.mkdir(parents=True, exist_ok=True)
             dest = dest / fname
@@ -2640,7 +2725,13 @@ def export_profile(paths: Paths, name: str, out: Optional[str] = None, include_s
     return dest
 
 
-_SECRET_NAME = re.compile(r"(key|token|secret|password|passwd|credential|auth|cookie)", re.I)
+# Names whose *last* part says "credential": ANTHROPIC_API_KEY, GITHUB_TOKEN,
+# CLIENT_SECRET, DB_PASSWORD, Authorization, X-Api-Key...  Settings such as
+# MAX_THINKING_TOKENS or CLAUDE_CODE_API_KEY_HELPER_TTL_MS are left alone.
+_SECRET_NAME = re.compile(
+    r"(^|[_-])(api[_-]?key|key|auth[_-]?token|access[_-]?token|refresh[_-]?token|bearer[_-]?token|id[_-]?token|"
+    r"token|secret|client[_-]?secret|secret[_-]?(access[_-]?)?key|private[_-]?key|password|passwd|pass|pat|"
+    r"credentials?|authorization|cookie)$", re.I)
 
 
 def redact_secrets(obj: Any) -> bool:
@@ -2699,6 +2790,29 @@ def _zip_tree(z: zipfile.ZipFile, src: Path, arc: str, skipped: List[str],
             add_file(z, full, arc + "/" + rel_root + fn)
 
 
+def _find_redacted(pdir: Path) -> List[str]:
+    """Names of settings that an export without --include-secrets blanked."""
+    found: List[str] = []
+
+    def walk(o: Any) -> None:
+        if isinstance(o, dict):
+            for k, v in o.items():
+                if v == "<redacted>":
+                    found.append(k)
+                else:
+                    walk(v)
+        elif isinstance(o, list):
+            for v in o:
+                walk(v)
+
+    for f in [pdir / "claude.json", pdir / SLOT_CONFIG / "settings.json", pdir / SLOT_CONFIG / "settings.local.json"]:
+        try:
+            walk(read_json(f))
+        except (OSError, ValueError):
+            pass
+    return sorted(set(found))
+
+
 def _safe_member(name: str) -> Optional[str]:
     """Return a safe relative path for an archive member, or None (zip-slip)."""
     n = name.replace("\\", "/")
@@ -2727,25 +2841,31 @@ def _safe_member(name: str) -> Optional[str]:
     return "/".join(parts)
 
 
+def read_manifest(archive: Path) -> Dict[str, Any]:
+    """The archive's manifest; SwitchError if it is not a claude-switch zip."""
+    if not archive.is_file():
+        raise SwitchError(t("bad_archive", why="file not found: %s" % archive))
+    try:
+        with zipfile.ZipFile(str(archive)) as z:
+            manifest = json.loads(z.read(MANIFEST_NAME).decode("utf-8"))
+    except KeyError:
+        raise SwitchError(t("bad_archive", why="missing %s" % MANIFEST_NAME))
+    except (zipfile.BadZipFile, zlib.error, ValueError, EOFError, OSError, RuntimeError, NotImplementedError) as e:
+        raise SwitchError(t("bad_archive", why="%s: %s" % (type(e).__name__, e)))
+    if not isinstance(manifest, dict) or manifest.get("tool") != "claude-switch":
+        raise SwitchError(t("bad_archive", why="not made by claude-switch"))
+    return manifest
+
+
 def import_profile(paths: Paths, archive: str, name: Optional[str] = None) -> str:
     src = Path(archive).expanduser()
-    if not src.is_file():
-        raise SwitchError(t("bad_archive", why="file not found: %s" % src))
+    manifest = read_manifest(src)  # before anything is set up or locked
     with StoreLock(paths):
         state = ensure_state(paths)
         _no_journal(state)
-        try:
-            z = zipfile.ZipFile(str(src))
-        except zipfile.BadZipFile as e:
-            raise SwitchError(t("bad_archive", why=e))
+        z = zipfile.ZipFile(str(src))
         with z:
-            try:
-                manifest = json.loads(z.read(MANIFEST_NAME).decode("utf-8"))
-            except KeyError:
-                raise SwitchError(t("bad_archive", why="missing %s" % MANIFEST_NAME))
-            if manifest.get("tool") != "claude-switch":
-                raise SwitchError(t("bad_archive", why="unknown tool %r" % manifest.get("tool")))
-            name = validate_name(name or manifest.get("profile") or src.stem)
+            name = validate_name(name or str(manifest.get("profile") or "") or src.stem)
             if _name_taken(paths, state, name):
                 raise SwitchError(t("profile_exists", name=name))
             tmp = paths.profiles_dir / ("_import-%s-%s" % (stamp(), os.getpid()))
@@ -2781,9 +2901,12 @@ def import_profile(paths: Paths, archive: str, name: Optional[str] = None) -> st
                 raise
         state["profiles"][name] = {"created": now_iso(), "note": t("note_import", file=src.name), "last_used": None,
                                    "id": uuid.uuid4().hex}
+        redacted = _find_redacted(paths.profile_dir(name))
         save_state(paths, state)
         log_event(paths, "import %s as %s" % (src, name))
         say(t("imported", file=src, name=name))
+        if redacted:
+            say(t("import_redacted", items=", ".join(redacted)))
         return name
 
 
@@ -2868,7 +2991,7 @@ def scan_projects(paths: Paths) -> List[Path]:
     return found
 
 
-def doctor(paths: Paths) -> List[str]:
+def doctor(paths: Paths, include_provider: bool = True) -> List[str]:
     """Things that affect a "clean" Claude Code but are not part of a profile."""
     notes: List[str] = []
     settings: Dict[str, Any] = {}
@@ -2890,7 +3013,7 @@ def doctor(paths: Paths) -> List[str]:
         if os.environ.get(var):
             notes.append(t("doctor_auth_env", var=var))
     api_env, api_top = api_settings(paths)
-    if api_env or api_top:
+    if (api_env or api_top) and include_provider:
         notes.append(t("doctor_settings_provider", vars=", ".join(sorted(list(api_env) + list(api_top)))))
     try:
         gcfg = read_json(paths.effective_config())
@@ -2962,7 +3085,7 @@ def trash(paths: Paths, opts: Options, empty: bool = False) -> None:
         if opts.interactive and not opts.yes and not ask_yes_no(t("confirm_empty_trash", size=human_size(total))):
             raise SwitchError(t("cancelled"))
         if not opts.interactive and not opts.yes:
-            raise SwitchError(t("error", err="add --yes to empty the trash without a prompt: trash --empty --yes"))
+            raise SwitchError(t("trash_needs_yes"))
         with StoreLock(paths):
             for e in entries:
                 rmtree(e)
@@ -2996,10 +3119,20 @@ def dragged_path(text: str) -> str:
 
 def archive_profile_name(archive: str) -> Optional[str]:
     try:
-        with zipfile.ZipFile(str(Path(archive).expanduser())) as z:
-            return json.loads(z.read(MANIFEST_NAME).decode("utf-8")).get("profile")
-    except Exception:
+        return str(read_manifest(Path(archive).expanduser()).get("profile") or "") or None
+    except SwitchError:
         return None
+
+
+def free_name(state: Optional[Dict[str, Any]], base: str) -> str:
+    """base-restored, base-restored-2, ... -- the first name not in use.
+    Without state, 'original' is taken (setting up registers it)."""
+    taken = list((state or {}).get("profiles", {})) or [DEFAULT_OLD_NAME]
+    cand, n = base + "-restored", 2
+    while any(same_name(cand, x) for x in taken):
+        cand = "%s-restored-%d" % (base, n)
+        n += 1
+    return cand
 
 
 def _pick_profile(state: Dict[str, Any], prompt_key: str = "ask_profile",
@@ -3074,7 +3207,8 @@ def menu(paths: Paths, opts: Options) -> None:
             name = _pick_profile(st) if st else DEFAULT_OLD_NAME
             if name:
                 desk = Path.home() / "Desktop"
-                export_profile(paths, name, out=str(desk) if desk.is_dir() else None)
+                keep = ask_yes_no(t("ask_backup_secrets"), default=True)
+                export_profile(paths, name, out=str(desk) if desk.is_dir() else None, include_secrets=keep)
 
         def _import() -> None:
             f = dragged_path(prompt(t("ask_zip_path")))
@@ -3082,8 +3216,9 @@ def menu(paths: Paths, opts: Options) -> None:
                 return
             name = archive_profile_name(f)
             st = load_state(paths)
-            if name and st and any(same_name(n, name) for n in st["profiles"]):
-                suggest = name + "-restored"
+            taken = list(st["profiles"]) if st else [DEFAULT_OLD_NAME]
+            if name and any(same_name(n, name) for n in taken):
+                suggest = free_name(st, name)
                 name = prompt(t("ask_import_name", name=name, suggest=suggest)).strip() or suggest
             import_profile(paths, f, name)
 
@@ -3278,7 +3413,7 @@ def main(argv: Optional[List[str]] = None, proc_finder: Optional[Callable[[], Li
         proc_finder=proc_finder or (lambda: find_claude_processes(paths)),
     )
     cmd = args.cmd or ("menu" if interactive else "status")
-    if opts.dry_run and cmd in ("init", "rename", "delete", "rm", "export", "import", "trash"):
+    if opts.dry_run and cmd in ("menu", "init", "rename", "delete", "rm", "export", "import", "trash"):
         print(t("no_dry_run"), file=sys.stderr)
         return 2
     try:
@@ -3310,9 +3445,8 @@ def main(argv: Optional[List[str]] = None, proc_finder: Optional[Callable[[], Li
         elif cmd == "clone":
             new_profile(paths, args.name, opts, clone_from=args.source)
         elif cmd == "reset":
-            keep = _decide_keep_api(paths, opts, args.keep_api) if not opts.dry_run else False
-            reset_profile(paths, args.name, opts, copy_items=args.copy, no_account_sync=args.no_account_sync,
-                          keep_api=keep)
+            reset_profile(paths, args.name, opts, copy_items=args.copy,
+                          no_account_sync=args.no_account_sync or None, keep_api=args.keep_api)
         elif cmd == "rename":
             rename_profile(paths, args.old, args.new)
         elif cmd in ("delete", "rm"):
