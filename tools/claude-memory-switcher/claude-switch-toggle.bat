@@ -3,12 +3,14 @@ rem Windows: double-click this file. It runs "claude_switch.py toggle" from this
 setlocal
 chcp 65001 >nul
 set "PYTHONUTF8=1"
-where py >nul 2>nul
+rem Prefer the py launcher that comes with python.org Python.
+py -3 -c "import sys" >nul 2>nul
 if errorlevel 1 goto trypython
 py -3 "%~dp0claude_switch.py" toggle
 goto done
 :trypython
-where python >nul 2>nul
+rem Without Python, "python" may be the Microsoft Store stub: make sure it really runs.
+python -c "import sys" >nul 2>nul
 if errorlevel 1 goto nopython
 python "%~dp0claude_switch.py" toggle
 goto done

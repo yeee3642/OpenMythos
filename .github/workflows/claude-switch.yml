@@ -27,3 +27,34 @@ jobs:
           python-version: ${{ matrix.python }}
       - run: python -m pip install pytest
       - run: python -m pytest tools/claude-memory-switcher -v -W error
+      - name: Launchers (Windows cmd.exe)
+        if: runner.os == 'Windows'
+        shell: cmd
+        env:
+          USERPROFILE: ${{ runner.temp }}\home
+          APPDATA: ${{ runner.temp }}\home\AppData\Roaming
+          LOCALAPPDATA: ${{ runner.temp }}\home\AppData\Local
+          CLAUDE_SWITCH_LANG: zh
+        run: |
+          mkdir "%USERPROFILE%\.claude"
+          echo # memory> "%USERPROFILE%\.claude\CLAUDE.md"
+          echo.| tools\claude-memory-switcher\claude-switch-toggle.bat
+          if exist "%USERPROFILE%\.claude\CLAUDE.md" exit /b 1
+          echo.| tools\claude-memory-switcher\claude-switch-toggle.bat
+          if not exist "%USERPROFILE%\.claude\CLAUDE.md" exit /b 1
+          echo.| tools\claude-memory-switcher\claude-switch-menu.bat
+      - name: Launchers (macOS / Linux)
+        if: runner.os != 'Windows'
+        env:
+          HOME: ${{ runner.temp }}/home
+          XDG_CONFIG_HOME: ${{ runner.temp }}/home/.config
+          CLAUDE_SWITCH_LANG: zh
+        run: |
+          mkdir -p "$HOME/.claude" && echo "# memory" > "$HOME/.claude/CLAUDE.md"
+          launcher=tools/claude-memory-switcher/claude-switch-toggle.command
+          [ "$RUNNER_OS" = Linux ] && launcher=tools/claude-memory-switcher/claude-switch-toggle.sh
+          bash "$launcher" < /dev/null
+          test ! -e "$HOME/.claude/CLAUDE.md"
+          bash "$launcher" < /dev/null
+          test -e "$HOME/.claude/CLAUDE.md"
+          bash tools/claude-memory-switcher/claude-switch-menu.command < /dev/null

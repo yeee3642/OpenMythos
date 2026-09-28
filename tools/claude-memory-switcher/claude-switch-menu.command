@@ -12,4 +12,4 @@ else
   "$PY" ./claude_switch.py menu
 fi
 echo
-read -r -p "Press Enter to close / 按 Enter 關閉 " _
+read -r -p "Press Enter to close / 按 Enter 關閉 " _ || true

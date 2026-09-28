@@ -345,7 +345,7 @@ def test_repair_after_hard_crash(home, monkeypatch, direction, crash_at):
         if i == crash_at:
             raise KeyboardInterrupt  # stands in for a crash / power loss
 
-    def no_rollback(paths_, journal):
+    def no_rollback(*_a):
         raise RuntimeError("simulated crash: no rollback")
 
     monkeypatch.setattr(cs, "_rollback", no_rollback)
@@ -408,6 +408,52 @@ def test_rollback_at_every_step(home, monkeypatch, fail_at):
     assert live_snapshot(home) == clean_live
 
 
+@pytest.mark.parametrize("fail_at", [4, 7, 11])
+@pytest.mark.parametrize("undo_fail_after", [0, 1, 3])
+@pytest.mark.parametrize("asked", ["forward", "back"])
+def test_interrupted_rollback_is_resumed_not_reversed(home, monkeypatch, fail_at, undo_fail_after, asked):
+    """A switch fails, then its rollback fails part-way too.  Whatever the user
+    picks afterwards, repair must finish the rollback, and both profiles must
+    come out exactly as they were."""
+    populate(home)
+    paths = P(home)
+    cs.clean(paths, opts())
+    (home / ".claude" / "CLAUDE.md").write_text("clean memory\n")
+    (home / ".claude" / "settings.json").write_text("{}\n")
+    cs.switch_to(paths, "original", opts())
+    orig_live = live_snapshot(home)
+    stored_clean = snapshot(paths.profile_dir("clean"))
+    real_move = cs.move
+    calls = {"n": 0, "undo": 0}
+
+    def flaky(src, dst):
+        calls["n"] += 1
+        if calls["n"] == fail_at:
+            raise PermissionError(13, "in use", str(src))
+        if calls["n"] > fail_at:  # we are rolling back now
+            if calls["undo"] == undo_fail_after:
+                calls["undo"] += 1
+                raise PermissionError(13, "in use during rollback", str(src))
+            calls["undo"] += 1
+        return real_move(src, dst)
+
+    monkeypatch.setattr(cs, "move", flaky)
+    with pytest.raises(cs.SwitchError) as ei:
+        cs.switch_to(paths, "clean", opts())
+    monkeypatch.setattr(cs, "move", real_move)
+    state = cs.load_state(paths)
+    if state["journal"] is None:  # the rollback happened to finish anyway
+        assert "rolled back" in str(ei.value)
+    else:
+        assert state["journal"]["phase"] == "rollback"
+        cs.repair(paths, opts(), direction=asked)
+    state = cs.load_state(paths)
+    assert state["journal"] is None and state["active"] == "original"
+    assert live_snapshot(home) == orig_live
+    assert snapshot(paths.profile_dir("clean")) == stored_clean
+    assert not (paths.store / cs.CONFLICTS_DIR).exists()
+
+
 def test_repair_keeps_files_recreated_during_crash(home, monkeypatch):
     """Claude re-created ~/.claude.json after it was parked; nothing may be lost."""
     populate(home)
@@ -425,7 +471,7 @@ def test_repair_keeps_files_recreated_during_crash(home, monkeypatch):
             (home / ".claude.json").write_text('{"recreated": true}')
             raise KeyboardInterrupt
 
-    monkeypatch.setattr(cs, "_rollback", lambda p, j: (_ for _ in ()).throw(RuntimeError("crash")))
+    monkeypatch.setattr(cs, "_rollback", lambda *a: (_ for _ in ()).throw(RuntimeError("crash")))
     with pytest.raises(cs.SwitchError):
         cs.execute_plan(paths, state, plan, fail_hook=boom)
     monkeypatch.undo()
@@ -483,15 +529,63 @@ def test_store_inside_config_dir_refused(home):
 
 def test_lock_blocks_second_instance(home):
     paths = P(home)
-    with cs.StoreLock(paths):
-        with pytest.raises(cs.SwitchError):
+    paths.store.mkdir(parents=True, exist_ok=True)
+    lock = paths.store / cs.LOCK_FILE
+    # a live holder (our parent process) with the file still being held
+    lock.write_text(json.dumps({"pid": os.getppid(), "time": 0, "nonce": "theirs"}))
+    if os.name != "nt":  # on Windows only an open handle proves liveness
+        with pytest.raises(cs.SwitchError) as ei:
             with cs.StoreLock(paths):
                 pass
-    # a stale lock (dead pid) is taken over
-    paths.store.mkdir(parents=True, exist_ok=True)
-    (paths.store / cs.LOCK_FILE).write_text(json.dumps({"pid": 999999999, "time": 0}))
+        assert str(lock) in str(ei.value)
+    # a dead holder is taken over, however young the lock is
+    lock.write_text(json.dumps({"pid": 999999999, "time": 9e12, "nonce": "theirs"}))
+    with cs.StoreLock(paths):
+        assert json.loads(lock.read_text())["pid"] == os.getpid()
+    assert not lock.exists()
+    # a lock left behind with our own (reused) pid is stale
+    lock.write_text(json.dumps({"pid": os.getpid(), "time": 0}))
     with cs.StoreLock(paths):
         pass
+    # an empty / half-written lock is respected for a grace period
+    lock.write_text("")
+    with pytest.raises(cs.SwitchError):
+        with cs.StoreLock(paths):
+            pass
+    os.utime(lock, (1_000_000_000, 1_000_000_000))
+    with cs.StoreLock(paths):
+        pass
+
+
+def test_lock_exit_only_removes_its_own_lock(home):
+    paths = P(home)
+    with cs.StoreLock(paths) as lk:
+        (paths.store / cs.LOCK_FILE).write_text(json.dumps({"pid": 1, "nonce": "someone-else"}))
+    assert (paths.store / cs.LOCK_FILE).exists()
+
+
+def test_missing_state_uses_bak_or_rebuilds_from_marker(home):
+    populate(home)
+    paths = P(home)
+    cs.clean(paths, opts())
+    (home / ".claude" / "CLAUDE.md").write_text("clean memory")
+    paths.state_file.unlink()  # .bak (one save behind) still there
+    st = cs.load_state(paths)
+    assert st["active"] == "clean" and "original" in st["profiles"]
+    for f in (paths.state_file, paths.state_file.with_name(cs.STATE_FILE + ".bak")):
+        if f.exists():
+            f.unlink()
+    st = cs.load_state(paths)  # rebuilt from folders + marker
+    assert st["active"] == "clean" and set(st["profiles"]) == {"original", "clean"}
+    cs.switch_to(paths, "original", opts())
+    assert (home / ".claude" / "CLAUDE.md").read_text() == "# my global memory\n"
+    # without a usable marker it refuses instead of re-initialising
+    (home / ".claude" / cs.MARKER_FILE).unlink()
+    paths.state_file.unlink()
+    paths.state_file.with_name(cs.STATE_FILE + ".bak").unlink()
+    with pytest.raises(cs.SwitchError):
+        cs.clean(paths, opts())
+    assert (paths.profile_dir("clean") / "config" / "CLAUDE.md").read_text() == "clean memory"
 
 
 def test_claude_config_dir_env(home, monkeypatch, tmp_path):
@@ -705,6 +799,17 @@ def test_parse_windows_cim():
     assert procs == {1: "desktop", 2: "cli", 3: "cli", 5: "desktop"}
     one = cs.parse_windows_cim(json.dumps(data[1]), own_pid=0)  # single object, not a list
     assert [p.pid for p in one] == [2]
+
+
+def test_windows_desktop_helpers():
+    exe = r"C:\Program Files\WindowsApps\Claude_1.2.3.0_x64__pzs8sxrjxfjjc\app\Claude.exe"
+    assert cs.msix_app_id(exe) == "Claude_pzs8sxrjxfjjc!Claude"
+    assert cs.msix_app_id(r"C:\Users\me\AppData\Local\AnthropicClaude\app-1.0\claude.exe") is None
+    procs = [cs.Proc(10, "desktop", "Claude.exe", exe, 4), cs.Proc(11, "desktop", "Claude.exe", exe, 10),
+             cs.Proc(12, "cli", "claude.exe", "x", 10), cs.Proc(13, "desktop", "Claude.exe", exe, 11)]
+    assert cs.desktop_roots(procs) == [10]
+    data = [{"ProcessId": 10, "ParentProcessId": 4, "Name": "Claude.exe", "ExecutablePath": exe, "CommandLine": ""}]
+    assert cs.parse_windows_cim(json.dumps(data), own_pid=0)[0].ppid == 4
 
 
 def test_parse_tasklist():
