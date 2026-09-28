@@ -871,7 +871,10 @@ def test_detects_a_real_process_named_claude(tmp_path):
     else:
         fake = tmp_path / "bin" / "claude"
         fake.parent.mkdir()
-        shutil.copy2("/bin/sleep", str(fake))
+        # copyfile, not copy2: macOS system binaries carry flags (SF_RESTRICTED)
+        # that an ordinary user may not copy.
+        shutil.copyfile("/bin/sleep", str(fake))
+        os.chmod(str(fake), 0o755)
         cmd = [str(fake), "60"]
     proc = subprocess.Popen(cmd)
     try:
