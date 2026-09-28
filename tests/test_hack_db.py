@@ -12,6 +12,7 @@ from hack_db.build import (
     load_json,
     validate,
 )
+from hack_db.merge import apply_verdicts, merge_results
 
 AVAILABLE = [Dataset(n) for n in DATASETS if Dataset(n).available]
 IDS = [d.name for d in AVAILABLE]
@@ -124,3 +125,52 @@ def test_combined_database(tmp_path):
         row[0] for row in conn.execute("SELECT DISTINCT chain FROM v_chain_yearly")
     }
     assert chains == set(IDS)
+
+
+# --- merging workflow results -------------------------------------------------------
+
+
+def _record(**overrides):
+    base = dict(Dataset("solana_hacks").incidents()[0])
+    base.update(overrides)
+    return base
+
+
+def test_apply_verdicts_splits_fields_between_lenses():
+    rec = _record(id="x-2024", loss_usd=100)
+    facts = {"verdict": "fix", "corrections": {"loss_usd": 90, "category": "nope"}}
+    scope = {
+        "verdict": "fix",
+        "corrections": {"category": "insider_threat", "loss_usd": 1},
+    }
+    merged, reason = apply_verdicts(rec, facts, scope)
+    assert reason is None
+    # Facts may not reclassify; scope may not change amounts.
+    assert merged["loss_usd"] == 90
+    assert merged["category"] == "insider_threat"
+
+
+def test_apply_verdicts_drops_on_either_lens():
+    rec = _record(id="x-2024")
+    assert apply_verdicts(rec, {"verdict": "drop", "reasons": "fake"}, None)[0] is None
+    assert apply_verdicts(rec, {"verdict": "keep"}, {"verdict": "drop"})[0] is None
+
+
+def test_merge_results_dedupes_ids_and_sorts():
+    existing = [_record(id="a-2022", date="2022-01-01")]
+    results = [
+        {
+            "record": _record(id="a-2022", date="2021-01-01", in_scope=True),
+            "facts": None,
+            "scope": None,
+        },
+        {
+            "record": _record(id="b-2023", date="2023-01-01"),
+            "facts": {"verdict": "drop"},
+            "scope": None,
+        },
+    ]
+    merged, log = merge_results(existing, results)
+    assert [r["id"] for r in merged] == ["a-2022-2", "a-2022"]
+    assert "in_scope" not in merged[0]
+    assert any(line.startswith("dropped b-2023") for line in log)
