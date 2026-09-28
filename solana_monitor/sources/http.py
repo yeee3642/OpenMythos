@@ -23,9 +23,15 @@ class HttpJsonClient:
             time.sleep(wait)
         self._last_request = time.monotonic()
 
-    def request(self, url: str, payload: dict | None = None):
+    def request(
+        self, url: str, payload: dict | None = None, headers: dict | None = None
+    ):
         data = None if payload is None else json.dumps(payload).encode()
-        headers = {"User-Agent": USER_AGENT, "Accept": "application/json"}
+        headers = {
+            "User-Agent": USER_AGENT,
+            "Accept": "application/json",
+            **(headers or {}),
+        }
         if data is not None:
             headers["Content-Type"] = "application/json"
         for attempt in range(self.retries):

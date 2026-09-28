@@ -123,6 +123,12 @@ class FilterConfig:
     flag_top10_holder_pct: float = 30
     drop_top10_holder_pct: float = 50
     recent_incident_days: int = 180
+    # Launch-stage filters (listener only): minimum quote tokens deposited when
+    # the pool is created, and how many pools one wallet may open per 24 hours.
+    min_initial_quote: dict[str, float] = field(
+        default_factory=lambda: {"SOL": 5.0, "USDC": 1_000.0, "USDT": 1_000.0}
+    )
+    max_creator_pools_24h: int = 3
     # Program IDs of deprecated pool programs (see raydium-legacy-amm-v3-2026).
     deprecated_programs: tuple[str, ...] = ()
     # Mints exempt from authority checks (e.g. USDC keeps a freeze authority).

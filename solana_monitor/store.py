@@ -5,11 +5,11 @@ from __future__ import annotations
 import json
 import sqlite3
 from dataclasses import asdict
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from .filters import RULES
-from .models import Decision, MintInfo, PoolSnapshot
+from .models import Decision, MintInfo, PoolFacts, PoolSnapshot
 from .sources.pool_listener import NewPoolEvent
 
 DEFAULT_MARKET_DB = Path(__file__).resolve().parent / "data" / "market.db"
@@ -44,7 +44,10 @@ CREATE TABLE IF NOT EXISTS pool_snapshots (
     volume_h24_usd      REAL,
     pair_created_at_ms  INTEGER,
     signature           TEXT,
-    url                 TEXT
+    url                 TEXT,
+    creator             TEXT,
+    initial_quote_amount REAL,
+    creator_recent_pools INTEGER
 );
 CREATE INDEX IF NOT EXISTS idx_snap_mint ON pool_snapshots (base_mint);
 
@@ -81,10 +84,25 @@ CREATE TABLE IF NOT EXISTS new_pool_events (
     dex          TEXT NOT NULL,
     program_id   TEXT NOT NULL,
     slot         INTEGER NOT NULL,
+    creator      TEXT NOT NULL,
     base_mints   TEXT NOT NULL,
     quote_mints  TEXT NOT NULL,
+    initial_quote_json TEXT NOT NULL,
     detected_at  TEXT NOT NULL
 );
+CREATE INDEX IF NOT EXISTS idx_events_creator ON new_pool_events (creator, detected_at);
+
+-- Raw reports from third-party providers (e.g. AVE contract risk), archived
+-- for later comparison with this tool's own decisions.
+CREATE TABLE IF NOT EXISTS external_reports (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    provider    TEXT NOT NULL,
+    kind        TEXT NOT NULL,
+    mint        TEXT NOT NULL,
+    fetched_at  TEXT NOT NULL,
+    payload     TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_reports_mint ON external_reports (mint);
 
 -- Pools that passed every filter, newest first.
 CREATE VIEW IF NOT EXISTS v_kept AS
@@ -139,18 +157,39 @@ class MarketStore:
         ).fetchone()
         return row is not None
 
-    def save_event(self, event: NewPoolEvent, base: list[str], quote: list[str]):
+    def creator_pool_count(self, creator: str, hours: int = 24) -> int:
+        """Pools this wallet created within the last `hours` (as seen by us)."""
+        since = (datetime.now(timezone.utc) - timedelta(hours=hours)).isoformat(
+            timespec="seconds"
+        )
+        row = self.conn.execute(
+            "SELECT COUNT(*) FROM new_pool_events WHERE creator = ? AND detected_at >= ?",
+            (creator, since),
+        ).fetchone()
+        return row[0]
+
+    def save_event(self, event: NewPoolEvent, facts: PoolFacts):
         self.conn.execute(
-            "INSERT OR IGNORE INTO new_pool_events VALUES (?, ?, ?, ?, ?, ?, ?)",
+            "INSERT OR IGNORE INTO new_pool_events VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 event.signature,
                 event.dex,
                 event.program_id,
                 event.slot,
-                ",".join(base),
-                ",".join(quote),
+                facts.creator,
+                ",".join(facts.base_mints),
+                ",".join(facts.quote_mints),
+                json.dumps(facts.initial_quote),
                 _now(),
             ),
+        )
+        self.conn.commit()
+
+    def save_external_report(self, provider: str, kind: str, mint: str, payload):
+        self.conn.execute(
+            "INSERT INTO external_reports (provider, kind, mint, fetched_at, payload)"
+            " VALUES (?, ?, ?, ?, ?)",
+            (provider, kind, mint, _now(), json.dumps(payload, ensure_ascii=False)),
         )
         self.conn.commit()
 

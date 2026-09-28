@@ -18,6 +18,7 @@ from solana_monitor.config import (
 from solana_monitor.filters import RULES, evaluate
 from solana_monitor.models import DROP, FLAG, KEEP, PoolSnapshot
 from solana_monitor.pipeline import Pipeline
+from solana_monitor.sources.ave import AveClient
 from solana_monitor.sources.dexscreener import pair_to_snapshot
 from solana_monitor.sources.pool_listener import (
     NewPoolEvent,
@@ -27,8 +28,8 @@ from solana_monitor.sources.pool_listener import (
 )
 from solana_monitor.sources.solana_rpc import (
     RpcError,
-    new_mints_from_transaction,
     parse_mint_account,
+    pool_facts_from_transaction,
     top10_holder_pct,
 )
 from solana_monitor.store import MarketStore
@@ -348,18 +349,51 @@ def test_event_from_notification():
     assert event_from_notification(PROGRAMS["pumpfun"], {"id": 1, "result": 7}) is None
 
 
-def test_new_mints_from_transaction():
-    tx = {
+def creation_tx(creator="Creator", base="NewToken", quote_amount=12.5):
+    return {
+        "transaction": {
+            "message": {"accountKeys": [{"pubkey": creator, "signer": True}, "Other"]}
+        },
         "meta": {
             "postTokenBalances": [
-                {"mint": "NewToken", "owner": "Pool"},
-                {"mint": WSOL_MINT, "owner": "Pool"},
-                {"mint": "NewToken", "owner": "Creator"},
+                {"mint": base, "owner": "PoolAuthority"},
+                {
+                    "mint": WSOL_MINT,
+                    "owner": "PoolAuthority",
+                    "uiTokenAmount": {"uiAmount": quote_amount},
+                },
+                # The creator's leftover wSOL is not pool liquidity.
+                {
+                    "mint": WSOL_MINT,
+                    "owner": creator,
+                    "uiTokenAmount": {"uiAmount": 99.0},
+                },
+                {"mint": base, "owner": creator},
             ]
-        }
+        },
     }
-    assert new_mints_from_transaction(tx) == (["NewToken"], [WSOL_MINT])
-    assert new_mints_from_transaction(None) == ([], [])
+
+
+def test_pool_facts_from_transaction():
+    facts = pool_facts_from_transaction(creation_tx())
+    assert facts.creator == "Creator"
+    assert (facts.base_mints, facts.quote_mints) == (["NewToken"], [WSOL_MINT])
+    assert facts.initial_quote == {WSOL_MINT: 12.5}
+    # Legacy transactions list account keys as plain strings.
+    legacy = {"transaction": {"message": {"accountKeys": ["Payer"]}}, "meta": {}}
+    assert pool_facts_from_transaction(legacy).creator == "Payer"
+    empty = pool_facts_from_transaction(None)
+    assert (empty.creator, empty.base_mints, empty.initial_quote) == ("", [], {})
+
+
+def test_launch_rules():
+    snap = PoolSnapshot("raydium_amm_v4", "", "raydium", "M", quote_symbol="SOL")
+    snap.initial_quote_amount, snap.creator_recent_pools = 2.0, 0
+    assert evaluate(snap).dropped_by == ["low_initial_liquidity"]
+    snap.initial_quote_amount, snap.creator_recent_pools = 50.0, 3
+    assert evaluate(snap).dropped_by == ["serial_creator"]
+    snap.creator_recent_pools = 2
+    assert evaluate(snap).verdict == KEEP
 
 
 # --- end-to-end pipeline with fake clients -----------------------------------------
@@ -408,7 +442,10 @@ def test_pipeline_scan_skips_rpc_for_market_drops_and_stores_reasons(tmp_path):
 
 
 def test_pipeline_listener_event(tmp_path):
-    tx = {"meta": {"postTokenBalances": [{"mint": "NewToken", "owner": "Curve"}]}}
+    tx = {
+        "transaction": {"message": {"accountKeys": ["Creator"]}},
+        "meta": {"postTokenBalances": [{"mint": "NewToken", "owner": "Curve"}]},
+    }
     bad = parse_mint_account("NewToken", mint_account(mint_authority="Dev"))
     rpc = FakeRpc({"NewToken": bad}, {"Sig1": tx})
     store = MarketStore(tmp_path / "m.db")
@@ -426,5 +463,72 @@ def test_pipeline_listener_event(tmp_path):
     assert decision.dropped_by == ["mint_authority_active"]
     # The same signature is not processed twice.
     assert pipe.process_event(event, retry_delay_s=0) == []
-    row = store.conn.execute("SELECT dex, base_mints FROM new_pool_events").fetchone()
-    assert row == ("pumpfun", "NewToken")
+    row = store.conn.execute(
+        "SELECT dex, creator, base_mints FROM new_pool_events"
+    ).fetchone()
+    assert row == ("pumpfun", "Creator", "NewToken")
+
+
+def test_pipeline_drops_serial_creator_and_thin_launches(tmp_path):
+    txs = {
+        f"Sig{i}": creation_tx(base=f"Token{i}", quote_amount=20.0) for i in range(5)
+    }
+    txs["Thin"] = creation_tx(creator="Someone", base="ThinToken", quote_amount=0.5)
+    mints = {m: clean_mint(m) for m in [f"Token{i}" for i in range(5)] + ["ThinToken"]}
+    pipe = Pipeline(MarketStore(tmp_path / "m.db"), FakeRpc(mints, txs))
+    raydium = PROGRAMS["raydium_amm_v4"].program_id
+
+    verdicts = []
+    for i in range(5):
+        event = NewPoolEvent("raydium_amm_v4", raydium, f"Sig{i}", i)
+        (result,) = pipe.process_event(event, retry_delay_s=0)
+        verdicts.append(result.decision.verdict)
+        assert result.snapshot.creator_recent_pools == i
+        assert result.snapshot.initial_quote_amount == 20.0
+    # max_creator_pools_24h = 3: the 4th and 5th pools from one wallet are dropped.
+    assert verdicts == [KEEP, KEEP, KEEP, DROP, DROP]
+
+    thin = NewPoolEvent("raydium_amm_v4", raydium, "Thin", 9)
+    (result,) = pipe.process_event(thin, retry_delay_s=0)
+    assert result.decision.dropped_by == ["low_initial_liquidity"]
+
+
+class FakeHttp:
+    def __init__(self, response):
+        self.response, self.requests = response, []
+
+    def request(self, url, payload=None, headers=None):
+        self.requests.append((url, headers))
+        return self.response
+
+
+def test_ave_client_builds_documented_requests(monkeypatch):
+    http = FakeHttp({"status": 1, "data": {}})
+    ave = AveClient(api_key="k", http=http, base_url="https://data.ave-api.xyz/v2")
+    ave.contract_risk("Mint1")
+    ave.holders("Mint1", limit=5)
+    ave.trending(page=2, page_size=10)
+    urls = [u for u, _ in http.requests]
+    assert urls == [
+        "https://data.ave-api.xyz/v2/contracts/Mint1-solana",
+        "https://data.ave-api.xyz/v2/tokens/holders/Mint1-solana?limit=5",
+        "https://data.ave-api.xyz/v2/tokens/trending?chain=solana&current_page=2&page_size=10",
+    ]
+    assert all(h == {"X-API-KEY": "k"} for _, h in http.requests)
+    monkeypatch.delenv("AVE_API_KEY", raising=False)
+    with pytest.raises(ValueError):
+        AveClient()
+
+
+def test_pipeline_archives_ave_reports_for_kept_pools_only(tmp_path):
+    good = "SampleMintGood111111111111111111111111111111"
+    hype = "SampleMintHype111111111111111111111111111111"
+    rpc = FakeRpc({good: clean_mint(good), hype: clean_mint(hype)})
+    http = FakeHttp({"status": 1, "data": {"risk": "sample"}})
+    store = MarketStore(tmp_path / "m.db")
+    pairs = json.loads(SAMPLE_PAIRS.read_text(encoding="utf-8"))["pairs"]
+    Pipeline(store, rpc, ave=AveClient(api_key="k", http=http)).process_pairs(pairs)
+    rows = store.conn.execute(
+        "SELECT provider, kind, mint FROM external_reports ORDER BY id"
+    ).fetchall()
+    assert rows == [("ave", "contract_risk", good), ("ave", "contract_risk", hype)]

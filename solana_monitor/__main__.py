@@ -19,6 +19,7 @@ from .config import DEFAULT_RPC_URL, DEFAULT_WS_URL, DEX_PROGRAMS, FilterConfig
 from .filters import RULES
 from .models import DROP
 from .pipeline import Pipeline, Result
+from .sources.ave import AveClient
 from .sources.dexscreener import DexScreenerClient
 from .sources.solana_rpc import SolanaRpcClient
 from .store import DEFAULT_MARKET_DB, MarketStore
@@ -39,11 +40,12 @@ def _pipeline(args) -> Pipeline:
     cfg = FilterConfig.from_file(args.config) if args.config else FilterConfig()
     cases = CaseLibrary(args.case_db) if Path(args.case_db).exists() else None
     rpc = None if getattr(args, "no_rpc", False) else SolanaRpcClient(args.rpc)
-    return Pipeline(MarketStore(args.db), rpc, cfg, cases)
+    ave = AveClient() if getattr(args, "ave", False) else None
+    return Pipeline(MarketStore(args.db), rpc, cfg, cases, ave)
 
 
 def cmd_rules(_args) -> None:
-    for stage in ("market", "onchain", "knowledge"):
+    for stage in ("launch", "market", "onchain", "knowledge"):
         print(f"\n== {stage} ==")
         for r in RULES.values():
             if r.stage == stage:
@@ -119,6 +121,11 @@ def main(argv=None) -> None:
         p.add_argument("--config", type=Path, help="過濾門檻 JSON 設定檔")
         if rpc:
             p.add_argument("--rpc", default=DEFAULT_RPC_URL, help="Solana RPC URL")
+            p.add_argument(
+                "--ave",
+                action="store_true",
+                help="保留的池子另外向 AVE 取風險報告存檔（需要 AVE_API_KEY）",
+            )
 
     sub.add_parser("rules", help="列出過濾規則").set_defaults(func=cmd_rules)
 

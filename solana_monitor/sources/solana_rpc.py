@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from ..config import DEFAULT_RPC_URL, POOL_AUTHORITIES, QUOTE_MINTS
-from ..models import MintInfo
+from ..models import MintInfo, PoolFacts
 from .http import HttpJsonClient
 
 
@@ -91,17 +91,30 @@ def top10_holder_pct(largest: list[dict], owners: dict[str, str], info: MintInfo
     return round(100 * sum(sorted(holders, reverse=True)[:10]) / info.supply, 2)
 
 
-def new_mints_from_transaction(tx: dict) -> tuple[list[str], list[str]]:
-    """Split the mints touched by a pool-creation tx into (base, quote) lists.
+def pool_facts_from_transaction(tx: dict | None) -> PoolFacts:
+    """Extract creator, token mints and deposited quote liquidity from a tx.
 
     Uses post-token balances, which works for every DEX without decoding each
-    program's instruction account layout.
+    program's instruction account layout. Quote tokens left in accounts not
+    owned by the creator are counted as the pool's initial liquidity.
     """
-    meta = (tx or {}).get("meta") or {}
+    tx = tx or {}
+    keys = ((tx.get("transaction") or {}).get("message") or {}).get("accountKeys") or []
+    first = keys[0] if keys else ""
+    creator = first.get("pubkey", "") if isinstance(first, dict) else first
     mints: dict[str, None] = {}
-    for bal in meta.get("postTokenBalances") or []:
-        if bal.get("mint"):
-            mints[bal["mint"]] = None
-    base = [m for m in mints if m not in QUOTE_MINTS]
-    quote = [m for m in mints if m in QUOTE_MINTS]
-    return base, quote
+    initial: dict[str, float] = {}
+    for bal in (tx.get("meta") or {}).get("postTokenBalances") or []:
+        mint = bal.get("mint")
+        if not mint:
+            continue
+        mints[mint] = None
+        if mint in QUOTE_MINTS and bal.get("owner") != creator:
+            amount = (bal.get("uiTokenAmount") or {}).get("uiAmount") or 0
+            initial[mint] = initial.get(mint, 0.0) + float(amount)
+    return PoolFacts(
+        creator=creator,
+        base_mints=[m for m in mints if m not in QUOTE_MINTS],
+        quote_mints=[m for m in mints if m in QUOTE_MINTS],
+        initial_quote=initial,
+    )

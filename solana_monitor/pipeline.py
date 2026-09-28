@@ -10,9 +10,10 @@ from .case_library import CaseLibrary
 from .config import QUOTE_MINTS, FilterConfig
 from .filters import evaluate
 from .models import DROP, Decision, MintInfo, PoolSnapshot
+from .sources.ave import AveClient
 from .sources.dexscreener import pair_to_snapshot
 from .sources.pool_listener import NewPoolEvent
-from .sources.solana_rpc import RpcError, SolanaRpcClient, new_mints_from_transaction
+from .sources.solana_rpc import RpcError, SolanaRpcClient, pool_facts_from_transaction
 from .store import MarketStore
 
 # Listener DEX labels → DexScreener dexId (so case-library lookups match).
@@ -43,11 +44,13 @@ class Pipeline:
         rpc: SolanaRpcClient | None = None,
         cfg: FilterConfig | None = None,
         cases: CaseLibrary | None = None,
+        ave: AveClient | None = None,
     ):
         self.store = store
         self.rpc = rpc
         self.cfg = cfg or FilterConfig()
         self.cases = cases
+        self.ave = ave
         self._mint_cache: dict[str, MintInfo | str] = {}
 
     def _mint(self, mint: str) -> MintInfo | str:
@@ -73,7 +76,17 @@ class Pipeline:
                     snap, None, self.cfg, self.cases, onchain_error=info
                 )
         self.store.save(snap, decision, mint)
+        if self.ave is not None and decision.verdict != DROP:
+            self._archive_ave_report(snap.base_mint)
         return Result(snap, decision, mint)
+
+    def _archive_ave_report(self, mint: str) -> None:
+        """Keep AVE's contract-risk report for kept pools, for later comparison."""
+        try:
+            report = self.ave.contract_risk(mint)
+        except (urllib.error.URLError, ValueError) as exc:
+            report = {"error": str(exc)}
+        self.store.save_external_report("ave", "contract_risk", mint, report)
 
     def process_pairs(
         self, pairs: list[dict], chain_id: str = "solana"
@@ -97,11 +110,13 @@ class Pipeline:
             if tx:
                 break
             time.sleep(retry_delay_s)
-        base, quote = new_mints_from_transaction(tx)
-        self.store.save_event(event, base, quote)
-        quote_mint = quote[0] if quote else ""
+        facts = pool_facts_from_transaction(tx)
+        # Count the creator's earlier pools before recording this one.
+        recent = self.store.creator_pool_count(facts.creator) if facts.creator else None
+        self.store.save_event(event, facts)
+        quote_mint = facts.quote_mints[0] if facts.quote_mints else ""
         results = []
-        for mint in base:
+        for mint in facts.base_mints:
             snap = PoolSnapshot(
                 source=event.dex,
                 pair_address="",
@@ -113,6 +128,9 @@ class Pipeline:
                 ),
                 program_id=event.program_id,
                 signature=event.signature,
+                creator=facts.creator,
+                initial_quote_amount=facts.initial_quote.get(quote_mint),
+                creator_recent_pools=recent,
             )
             results.append(self.process(snap))
         return results

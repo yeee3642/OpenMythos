@@ -31,6 +31,22 @@ class PoolSnapshot:
     pair_created_at_ms: int | None = None
     signature: str = ""  # creating transaction, when self-collected
     url: str = ""
+    # Launch facts, only known when the pool creation was seen by the listener.
+    creator: str = ""  # fee payer of the pool-creation transaction
+    initial_quote_amount: float | None = None  # quote tokens deposited at creation
+    creator_recent_pools: int | None = None  # pools this creator opened in 24h
+
+
+@dataclass
+class PoolFacts:
+    """What a pool-creation transaction tells us, without per-DEX decoding."""
+
+    creator: str
+    base_mints: list[str]
+    quote_mints: list[str]
+    # Quote-token amount (UI units) held outside the creator's own accounts
+    # after the transaction, i.e. the liquidity deposited into the pool.
+    initial_quote: dict[str, float] = field(default_factory=dict)
 
 
 @dataclass

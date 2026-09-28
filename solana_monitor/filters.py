@@ -1,7 +1,8 @@
 """Pool / token filters: decide what to drop and what to keep.
 
-Rules run in three stages:
+Rules run in four stages:
 
+0. ``launch``    – facts from the pool-creation transaction (listener only);
 1. ``market``    – cheap checks on market data (DexScreener or listener);
 2. ``onchain``   – token-mint safety checks read from Solana RPC;
 3. ``knowledge`` – checks against the hack case library.
@@ -100,6 +101,21 @@ RULES = {
             "估值遠高於流動性",
             "完全稀釋估值 (FDV) 是流動性的數十倍以上，少量賣壓就會讓價格崩跌。",
             weight=2,
+        ),
+        # --- stage 0: pool-creation transaction (listener) ---------------------------
+        Rule(
+            "low_initial_liquidity",
+            "launch",
+            DROP,
+            "建池時注入的流動性過低",
+            "建池交易存入的 SOL / USDC / USDT 太少，多半是測試池、垃圾池或拉盤前的誘餌。",
+        ),
+        Rule(
+            "serial_creator",
+            "launch",
+            DROP,
+            "同一錢包短時間大量建池",
+            "同一個建池錢包 24 小時內開了多個池子，典型的批量發幣、割完就跑的模式。",
         ),
         # --- stage 2: on-chain mint checks ------------------------------------------
         Rule(
@@ -258,6 +274,30 @@ def market_rules(snap: PoolSnapshot, cfg: FilterConfig) -> list[RuleHit]:
     return hits
 
 
+def launch_rules(snap: PoolSnapshot, cfg: FilterConfig) -> list[RuleHit]:
+    hits = []
+    minimum = cfg.min_initial_quote.get(snap.quote_symbol.upper())
+    if (
+        snap.initial_quote_amount is not None
+        and minimum is not None
+        and snap.initial_quote_amount < minimum
+    ):
+        hits.append(
+            _hit(
+                "low_initial_liquidity",
+                f"{snap.initial_quote_amount:,.2f} {snap.quote_symbol} < {minimum:,.0f}",
+            )
+        )
+    if (
+        snap.creator_recent_pools is not None
+        and snap.creator_recent_pools >= cfg.max_creator_pools_24h
+    ):
+        hits.append(
+            _hit("serial_creator", f"24 小時內已建 {snap.creator_recent_pools} 個池")
+        )
+    return hits
+
+
 def onchain_rules(mint: MintInfo, cfg: FilterConfig) -> list[RuleHit]:
     if mint.token_program not in (TOKEN_PROGRAM, TOKEN_2022_PROGRAM):
         return [_hit("unknown_token_program", mint.token_program)]
@@ -326,7 +366,7 @@ def evaluate(
     onchain_error: str | None = None,
 ) -> Decision:
     cfg = cfg or FilterConfig()
-    hits = market_rules(snap, cfg)
+    hits = launch_rules(snap, cfg) + market_rules(snap, cfg)
     if mint is not None:
         hits += onchain_rules(mint, cfg)
     elif onchain_error:
