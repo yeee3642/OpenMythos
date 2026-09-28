@@ -1,0 +1,138 @@
+# Solana 流動池資料收集與過濾（solana_monitor）
+
+這是整個流程的第二步。第一步是[案例庫](../solana_hacks/README.md)，整理了 Solana 上曾被駭的事件並分類。這一步用那些案例定出過濾規則，再收集 Solana 新流動池的資料，**過濾掉危險或沒有價值的池子，只留下值得關注的**，每個決定都附上理由存進 SQLite。
+
+```
+案例庫 (solana_hacks.db)
+   │  歸納成規則，每條規則標注對應案例
+   ▼
+資料來源 ──► 第 1 階段：市場資料過濾 ──► 第 2 階段：鏈上 mint 檢查 ──► 第 3 階段：案例庫比對 ──► market.db
+DexScreener      免費，先把雜訊丟掉          只對通過第 1 階段的池子                                  保留 / 丟棄
+自己監聽新池                                  呼叫 RPC，節省額度                                        ＋理由
+```
+
+## 目標鏈：Solana
+
+案例庫已經收錄 Solana 的駭客事件，所以資料收集也以 Solana 為主。如果你熟悉 PancakeSwap（BSC），可以這樣對照：
+
+| PancakeSwap（BSC） | Solana 對應 | 本工具的監聽標記 |
+|---|---|---|
+| V2 `PairCreated` 事件 | Raydium AMM v4 `initialize2` | `raydium_amm_v4` |
+| V2 類型（恆定乘積） | Raydium CPMM、PumpSwap | `raydium_cpmm`、`pumpswap` |
+| V3 `PoolCreated`（集中流動性） | Raydium CLMM、Orca Whirlpool、Meteora DLMM | `raydium_clmm`、`orca_whirlpool`、`meteora_dlmm` |
+| （無） | Pump.fun 聯合曲線發幣 | `pumpfun` |
+
+EVM 用 `eth_subscribe logs` 監聽事件；Solana 則用 `logsSubscribe`，依程式 ID 訂閱，再從 `Program log:` 找出建池指令。
+
+## 資料來源
+
+| 來源 | 狀態 | 優點 | 缺點 |
+|---|---|---|---|
+| **DexScreener API** | ✅ 已實作（`scan`） | 免金鑰、有流動性、交易次數、FDV | 有延遲與速率限制；只看得到已被收錄的池子 |
+| **自己監聽（Solana RPC WebSocket）** | ✅ 已實作（`listen`） | 最即時，池子一建立就能看到 | 剛建立的池子沒有市場數據；公共 RPC 限流嚴重，建議用 Helius、Triton、QuickNode 等付費節點 |
+| **Solana RPC（mint 檢查）** | ✅ 已實作 | 直接讀鏈上權限與 Token-2022 擴充，不依賴第三方 | 每個代幣要多次 RPC 呼叫 |
+| AVE | ⬜ 未實作 | 資料涵蓋多條鏈 | 需要申請 API 金鑰；使用前請確認開放範圍與使用條款 |
+| GMGN | ⬜ 未實作 | 資料豐富（聰明錢、開發者紀錄） | 據我所知沒有正式公開 API，爬取可能違反使用條款 |
+
+## 過濾掉什麼、留下什麼
+
+**原則**：任何一條「丟棄」規則成立，就丟掉這個池子；「標記」規則不丟棄，但會提高風險分數。**全部通過的池子才保留**，並依風險分排序。
+
+### 第 1 階段：市場資料（不花 RPC 額度）
+
+| 規則 | 動作 | 過濾什麼 | 對應案例 |
+|---|---|---|---|
+| `quote_not_allowed` | 丟棄 | 不是以 SOL / USDC / USDT 報價 | |
+| `low_liquidity` | 丟棄 | 流動性 < 10,000 美元，價格容易被操縱 | Mango、Solend USDH、Loopscale |
+| `inactive_pool` | 丟棄 | 一小時內沒有任何交易（死池、垃圾池） | |
+| `symbol_impersonation` | 丟棄 | 符號與 SOL、USDC、JUP、BONK 等相同，但 mint 地址不同 | Jupiter、Pump.fun X 帳號遭挾持 |
+| `honeypot_suspect` | 丟棄 | 一小時內 ≥ 20 次買入卻 0 次賣出 | |
+| `deprecated_program` | 丟棄 | 池子建立在已淘汰的程式上（在設定檔中列出） | Raydium 舊版 AMM V3（2026） |
+| `fdv_liquidity_ratio` | 標記 | FDV 超過流動性 50 倍 | |
+
+### 第 2 階段：鏈上 mint 檢查
+
+| 規則 | 動作 | 過濾什麼 | 對應案例 |
+|---|---|---|---|
+| `onchain_check_failed` | 丟棄 | 讀不到 mint 資料（寧可錯殺） | |
+| `unknown_token_program` | 丟棄 | 不是 SPL Token / Token-2022 | |
+| `mint_authority_active` | 丟棄 | 增發權限未放棄 | Cashio |
+| `freeze_authority_active` | 丟棄 | 凍結權限未放棄（貔貅盤常見手法） | |
+| `permanent_delegate` | 丟棄 | Token-2022 永久委託，可轉走任何人的幣 | |
+| `transfer_hook` | 丟棄 | Token-2022 transfer hook，可阻擋賣出 | |
+| `non_transferable` / `default_frozen` / `pausable` | 丟棄 | 不可轉讓、新帳戶預設凍結、可暫停轉帳 | |
+| `transfer_fee` | 丟棄 / 標記 | 轉帳稅 > 1% 丟棄；有稅或有調稅權限則標記 | |
+| `confidential_transfer` | 標記 | 使用機密轉帳擴充 | ZK ElGamal 漏洞（2025 兩起） |
+| `mint_close_authority` | 標記 | mint 可被關閉後重建 | |
+| `holder_concentration` | 丟棄 / 標記 | 前 10 大持有人（排除池子與銷毀地址）> 50% 丟棄，> 30% 標記 | |
+
+### 第 3 階段：案例庫比對
+
+| 規則 | 動作 | 說明 |
+|---|---|---|
+| `protocol_recent_incident` | 標記 | 池子所在的 DEX 在 180 天內有協議層級的資安事件，例如 Raydium 舊版 AMM V3。只計合約漏洞、私鑰外洩、預言機操縱等類別；團隊被詐騙或 X 帳號被盜不算 |
+
+完整規則與理由可用 `python -m solana_monitor rules` 列出。每條規則的 `case_refs` 都由測試檢查，確保對應的案例確實存在於案例庫。
+
+### 調整門檻
+
+所有門檻都可以用 JSON 設定檔覆寫：
+
+```json
+{
+  "min_liquidity_usd": 20000,
+  "honeypot_min_buys_h1": 30,
+  "drop_top10_holder_pct": 40,
+  "deprecated_programs": ["<舊程式 ID>"]
+}
+```
+
+```bash
+python -m solana_monitor scan --config my_filters.json
+```
+
+## 使用方式
+
+```bash
+# 列出所有過濾規則
+python -m solana_monitor rules
+
+# 離線示範：用範例資料跑一次過濾（不需網路）
+python -m solana_monitor scan --pairs-file solana_monitor/examples/sample_pairs.json --no-rpc
+
+# 從 DexScreener 抓最新 Solana 代幣並過濾（需網路；RPC 建議用付費節點）
+export SOLANA_RPC_URL="https://<你的 RPC>"
+python -m solana_monitor scan --limit 30
+
+# 即時監聽新池（需要 pip install -r solana_monitor/requirements.txt）
+export SOLANA_WS_URL="wss://<你的 RPC>"
+python -m solana_monitor listen --programs raydium_amm_v4,pumpswap
+
+# 統計：被丟棄的原因、最近保留的池子
+python -m solana_monitor report
+```
+
+需要能連到 `api.dexscreener.com` 與你的 Solana RPC 節點。若在 Claude Code 雲端環境執行，要先在環境設定的網路存取中允許這些網域。
+
+## 資料庫（`solana_monitor/data/market.db`）
+
+| 資料表 / 檢視表 | 內容 |
+|---|---|
+| `pool_snapshots` | 每次觀察到的池子（來源、DEX、代幣、流動性、交易次數等） |
+| `mint_checks` | 鏈上 mint 檢查結果（權限、Token-2022 擴充、持幣集中度） |
+| `decisions` | 保留或丟棄，以及風險分 |
+| `rule_hits` | 觸發的規則、理由與對應案例 |
+| `new_pool_events` | 監聽到的新池建立交易 |
+| `rules` | 規則說明（與程式碼同步） |
+| `v_kept` | 通過全部過濾的池子 |
+| `v_drop_reasons` | 各規則丟棄了多少池子 |
+
+`market.db` 是執行時產生的資料，已加入 `.gitignore`。
+
+## 限制
+
+- **監聽標記依賴程式日誌格式**：DEX 升級後日誌字串可能改變，需要更新 `config.py` 的 `create_markers`。
+- **剛建立的池子沒有市場數據**：監聽到的新池只做鏈上檢查；等 DexScreener 收錄後，再用 `scan` 補市場數據。
+- **持幣集中度的池子地址排除是啟發式的**：目前只內建 Raydium AMM v4、CPMM 的 authority 與銷毀地址，其他 DEX 的池子帳戶可能被算進集中度。可以在 `config.py` 的 `POOL_AUTHORITIES` 補充。
+- **貔貅盤判斷只看買賣次數**：沒有實際模擬賣出交易，可能漏判或誤判。
+- **過濾只降低風險，不保證安全**：規則以已知手法為基礎，新型攻擊需要持續回填案例庫並新增規則。

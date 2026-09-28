@@ -1,0 +1,2 @@
+# Only needed for `python -m solana_monitor listen`; everything else is stdlib.
+websockets>=12

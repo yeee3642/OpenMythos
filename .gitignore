@@ -428,3 +428,6 @@ flycheck_*.el
 # network security
 /network-security.data
 
+
+# solana_monitor runtime data
+solana_monitor/data/
